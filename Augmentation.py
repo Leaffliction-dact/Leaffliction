@@ -1,6 +1,7 @@
 import skimage as ski
 import os
 import argparse
+import matplotlib.pyplot as plt
 from utils.effects import EffectName
 
 
@@ -30,6 +31,8 @@ def parse_args():
         print("Available effects:")
         for effect_name in effect_names:
             print(f"  {effect_name}")
+    if (not args.effects):
+        args.effects = [effect.name for effect in EffectName]
     return args
 
 
@@ -38,8 +41,25 @@ def main():
     image_list = []
     for filename in args.input_list:
         image_list.append(ski.io.imread(filename))
-    print(args)
     print(image_list)
+    print(args)
+
+    n_rows = len(image_list)
+    n_cols = len(args.effects)
+    inches = 2
+    fig, axes = plt.subplots(n_rows, n_cols,
+            figsize=(n_cols * inches, n_rows * inches))
+
+    for row in range(n_rows):
+        for col in range(n_cols):
+            ax = axes[row, col]
+            ax.imshow(image_list[row])
+            ax.axis('off')
+            if row == 0:
+                ax.set_title(args.effects[col])
+
+    plt.tight_layout()
+    plt.show()
 
 
 if (__name__ == "__main__"):
