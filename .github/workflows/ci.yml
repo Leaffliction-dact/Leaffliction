@@ -23,7 +23,7 @@ jobs:
       - name: "set up flake8"
         run: |
           uv tool install flake8
-          uv update-shell
+          uv tool update-shell
       
       - name: "check for type errors."
         run: flake8 *.py
