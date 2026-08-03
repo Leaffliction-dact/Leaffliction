@@ -1,0 +1,29 @@
+name: CI
+run-name: python ci
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  python_ci:
+    name: python
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: "Set up Python"
+        uses: actions/setup-python@v6
+
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b
+
+      - name: "set up flake8"
+        run: |
+          uv tool install flake8
+          uv update-shell
+      
+      - name: "check for type errors."
+        run: flake8 *.py
