@@ -35,7 +35,11 @@ def parse_args():
 
 def main():
     args = parse_args()
+    image_list = []
+    for filename in args.input_list:
+        image_list.append(ski.io.imread(filename))
     print(args)
+    print(image_list)
 
 
 if (__name__ == "__main__"):
