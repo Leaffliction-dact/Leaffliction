@@ -2,7 +2,7 @@ import skimage as ski
 import os
 import argparse
 import matplotlib.pyplot as plt
-from utils.effects import EffectName
+from utils.effects import EffectName, effect_zoom
 
 
 def parse_args():
@@ -45,15 +45,36 @@ def main():
     print(args)
 
     n_rows = len(image_list)
-    n_cols = len(args.effects)
+    n_cols = len(args.effects) + 1
+    for effect in args.effects:
+        print(effect)
+        match effect:
+            case EffectName.ZOOM.name:
+                image_list = effect_zoom(image_list, n_rows, 2.0)
+#            case EffectName.CROP.name:
+#                image_list = effect_crop(image_list)
+#            case EffectName.SKEW.name:
+#                image_list = effect_skew(image_list)
+#            case EffectName.ROTATION.name:
+#                image_list = effect_rotation(image_list)
+#            case EffectName.BLUR.name:
+#                image_list = effect_blur(image_list)
+#            case EffectName.CONTRAST.name:
+#                image_list = effect_contrast(image_list)
+#            case EffectName.BRIGHTENSS.name:
+#                image_list = effect_brightness(image_list)
+            case _:
+                print("ok bro")
     inches = 2
     fig, axes = plt.subplots(n_rows, n_cols,
             figsize=(n_cols * inches, n_rows * inches))
 
-    for row in range(n_rows):
-        for col in range(n_cols):
+    print(len(image_list))
+    for col in range(n_cols):
+        for row in range(n_rows):
             ax = axes[row, col]
-            ax.imshow(image_list[row])
+            print(row+ col*n_rows)
+            ax.imshow(image_list[row + col*n_rows])
             ax.axis('off')
             if row == 0:
                 ax.set_title(args.effects[col])
