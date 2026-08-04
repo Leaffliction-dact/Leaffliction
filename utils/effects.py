@@ -11,7 +11,7 @@ class EffectName(Enum):
     ROTATION = 3
     BLUR = 4
     CONTRAST = 5
-    BRIGHTENSS = 6
+    BRIGHTNESS = 6
 
 
 def effect_zoom(img_arr, rows, zoom_factor):
@@ -108,7 +108,20 @@ def effect_contrast(img_arr, rows, factor):
     for i in range(rows):
         image = img_arr[i].copy()
 
-        out = cv2.multiply(image, factor)
+        beta = 128 * (1 - factor)
+        out = cv2.addWeighted(image, factor, image, 0, beta)
+        img_arr.append(out)
+    print(len(img_arr))
+    return img_arr
+
+
+def effect_brightness(img_arr, rows, factor):
+    factor *= 255
+    factor = int(factor)
+    for i in range(rows):
+        image = img_arr[i].copy()
+
+        out = cv2.add(image, factor)
         img_arr.append(out)
     print(len(img_arr))
     return img_arr

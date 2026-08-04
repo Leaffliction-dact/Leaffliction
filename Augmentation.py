@@ -10,6 +10,7 @@ from utils.effects import (
     effect_rotation,
     effect_blur,
     effect_contrast,
+    effect_brightness,
 )
 
 
@@ -69,9 +70,9 @@ def main():
             case EffectName.BLUR.name:
                 image_list = effect_blur(image_list, n_rows, 3.5)
             case EffectName.CONTRAST.name:
-                image_list = effect_contrast(image_list, n_rows, 1.6)
-#            case EffectName.BRIGHTENSS.name:
-#                image_list = effect_brightness(image_list)
+                image_list = effect_contrast(image_list, n_rows, 1.9)
+            case EffectName.BRIGHTNESS.name:
+                image_list = effect_brightness(image_list, n_rows, 0.5)
             case _:
                 print("ok bro")
     inches = 2
