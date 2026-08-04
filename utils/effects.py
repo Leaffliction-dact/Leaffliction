@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 from enum import Enum
+import math
 
 
 class EffectName(Enum):
@@ -65,5 +66,21 @@ def effect_skew(img_arr, rows, skew_factor):
                                 borderMode=cv2.BORDER_CONSTANT,
                                 borderValue=0)
         img_arr.append(skewed)
+    print(len(img_arr))
+    return img_arr
+
+def effect_rotation(img_arr, rows, rads):
+    for i in range(rows):
+        image = img_arr[i].copy()
+
+        h, w = image.shape[:2]
+        degrees = math.degrees(rads)
+        matrix = cv2.getRotationMatrix2D((w / 2, h / 2), degrees, 1.0)
+
+        rotated = cv2.warpAffine(image, matrix, (w, h),
+                                flags=cv2.INTER_LINEAR,
+                                borderMode=cv2.BORDER_CONSTANT,
+                                borderValue=0)
+        img_arr.append(rotated)
     print(len(img_arr))
     return img_arr
