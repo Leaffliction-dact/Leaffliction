@@ -1,6 +1,6 @@
 import numpy as np
 from enum import Enum
-from scipy.ndimage import zoom
+from scipy.ndimage import zoom, affine_transform
 
 
 class EffectName(Enum):
@@ -37,7 +37,6 @@ def effect_zoom(img_arr, rows, zoom_factor):
 def effect_crop(img_arr, rows, crop_factor):
     for i in range(rows):
         image = img_arr[i].copy()
-        print(image.shape)
 
         h, w = image.shape[:2]
         ch = int(np.round(h / crop_factor))
@@ -52,5 +51,21 @@ def effect_crop(img_arr, rows, crop_factor):
         image[:, -left:] = color
 
         img_arr.append(image)
+    print(len(img_arr))
+    return img_arr
+
+def effect_skew(img_arr, rows, skew_factor):
+    for i in range(rows):
+        image = img_arr[i].copy()
+
+        matrix = np.array([
+            [1,            0, 0],
+            [-skew_factor, 1, 0],
+            [0,            0, 1],
+        ])
+
+        skewed = affine_transform(image, matrix, offset=0,
+                                  order=1, mode='constant', cval=0)
+        img_arr.append(skewed)
     print(len(img_arr))
     return img_arr
