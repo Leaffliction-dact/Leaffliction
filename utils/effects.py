@@ -27,7 +27,6 @@ def effect_zoom(img_arr, rows, zoom_factor):
         cropped = image[top:top+zh, left:left+zw]
         out = cv2.resize(cropped, (w, h), interpolation=cv2.INTER_LINEAR)
         img_arr.append(out)
-    print(len(img_arr))
     return img_arr
 
 
@@ -48,7 +47,6 @@ def effect_crop(img_arr, rows, crop_factor):
         image[:, w-left:] = color
 
         img_arr.append(image)
-    print(len(img_arr))
     return img_arr
 
 
@@ -67,7 +65,6 @@ def effect_skew(img_arr, rows, skew_factor):
                                 borderMode=cv2.BORDER_CONSTANT,
                                 borderValue=0)
         img_arr.append(skewed)
-    print(len(img_arr))
     return img_arr
 
 
@@ -84,7 +81,6 @@ def effect_rotation(img_arr, rows, rads):
                                 borderMode=cv2.BORDER_CONSTANT,
                                 borderValue=0)
         img_arr.append(rotated)
-    print(len(img_arr))
     return img_arr
 
 
@@ -100,7 +96,6 @@ def effect_blur(img_arr, rows, blurfactor):
         kw += 1 - kw % 2
         blurred = cv2.GaussianBlur(image, (kh, kw), 0)
         img_arr.append(blurred)
-    print(len(img_arr))
     return img_arr
 
 
@@ -111,7 +106,6 @@ def effect_contrast(img_arr, rows, factor):
         beta = 128 * (1 - factor)
         out = cv2.addWeighted(image, factor, image, 0, beta)
         img_arr.append(out)
-    print(len(img_arr))
     return img_arr
 
 
@@ -123,5 +117,4 @@ def effect_brightness(img_arr, rows, factor):
 
         out = cv2.add(image, factor)
         img_arr.append(out)
-    print(len(img_arr))
     return img_arr

@@ -50,14 +50,11 @@ def main():
     image_list = []
     for filename in args.input_list:
         image_list.append(ski.io.imread(filename))
-    print(image_list)
-    print(args)
 
     args.effects.insert(0, "NONE")
     n_rows = len(image_list)
     n_cols = len(args.effects)
     for effect in args.effects:
-        print(effect)
         match effect:
             case EffectName.ZOOM.name:
                 image_list = effect_zoom(image_list, n_rows, 1.3)
@@ -74,16 +71,14 @@ def main():
             case EffectName.BRIGHTNESS.name:
                 image_list = effect_brightness(image_list, n_rows, 0.5)
             case _:
-                print("ok bro")
+                pass
     inches = 2
     fig, axes = plt.subplots(n_rows, n_cols,
             figsize=(n_cols * inches, n_rows * inches))
 
-    print(len(image_list))
     for col in range(n_cols):
         for row in range(n_rows):
             ax = axes[row, col]
-            print(row+ col*n_rows)
             ax.imshow(image_list[row + col*n_rows])
             ax.axis('off')
             if row == 0:
