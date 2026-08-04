@@ -84,3 +84,18 @@ def effect_rotation(img_arr, rows, rads):
         img_arr.append(rotated)
     print(len(img_arr))
     return img_arr
+
+def effect_blur(img_arr, rows, blurfactor):
+    blurfactor /= 100.0
+    for i in range(rows):
+        image = img_arr[i].copy()
+
+        h, w = image.shape[:2]
+        kh = int(blurfactor*h)
+        kh += 1 - kh % 2
+        kw = int(blurfactor*w)
+        kw += 1 - kw % 2
+        blurred = cv2.GaussianBlur(image, (kh, kw), 0)
+        img_arr.append(blurred)
+    print(len(img_arr))
+    return img_arr
