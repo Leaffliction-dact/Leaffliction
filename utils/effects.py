@@ -32,3 +32,25 @@ def effect_zoom(img_arr, rows, zoom_factor):
         img_arr.append(out)
     print(len(img_arr))
     return img_arr
+
+
+def effect_crop(img_arr, rows, crop_factor):
+    for i in range(rows):
+        image = img_arr[i].copy()
+        print(image.shape)
+
+        h, w = image.shape[:2]
+        ch = int(np.round(h / crop_factor))
+        cw = int(np.round(w / crop_factor))
+        top = (h - ch) // 2
+        left = (w - cw) // 2
+
+        color = np.array([0, 0, 0])
+        image[:top, :] = color
+        image[-top:, :] = color
+        image[:, :left] = color
+        image[:, -left:] = color
+
+        img_arr.append(image)
+    print(len(img_arr))
+    return img_arr

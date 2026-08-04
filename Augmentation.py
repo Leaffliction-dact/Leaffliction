@@ -2,7 +2,7 @@ import skimage as ski
 import os
 import argparse
 import matplotlib.pyplot as plt
-from utils.effects import EffectName, effect_zoom
+from utils.effects import EffectName, effect_zoom, effect_crop
 
 
 def parse_args():
@@ -44,15 +44,16 @@ def main():
     print(image_list)
     print(args)
 
+    args.effects.insert(0, "NONE")
     n_rows = len(image_list)
-    n_cols = len(args.effects) + 1
+    n_cols = len(args.effects)
     for effect in args.effects:
         print(effect)
         match effect:
             case EffectName.ZOOM.name:
-                image_list = effect_zoom(image_list, n_rows, 2.0)
-#            case EffectName.CROP.name:
-#                image_list = effect_crop(image_list)
+                image_list = effect_zoom(image_list, n_rows, 1.3)
+            case EffectName.CROP.name:
+                image_list = effect_crop(image_list, n_rows, 1.3)
 #            case EffectName.SKEW.name:
 #                image_list = effect_skew(image_list)
 #            case EffectName.ROTATION.name:
