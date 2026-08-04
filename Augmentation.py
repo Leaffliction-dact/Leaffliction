@@ -67,21 +67,21 @@ def main():
             case _:
                 print("ok bro")
     inches = 2
-#    fig, axes = plt.subplots(n_rows, n_cols,
-#            figsize=(n_cols * inches, n_rows * inches))
+    fig, axes = plt.subplots(n_rows, n_cols,
+            figsize=(n_cols * inches, n_rows * inches))
 
     print(len(image_list))
-#    for col in range(n_cols):
-#        for row in range(n_rows):
-#            ax = axes[row, col]
-#            print(row+ col*n_rows)
-#            ax.imshow(image_list[row + col*n_rows])
-#            ax.axis('off')
-#            if row == 0:
-#                ax.set_title(args.effects[col])
-#
-#    plt.tight_layout()
-#    plt.show()
+    for col in range(n_cols):
+        for row in range(n_rows):
+            ax = axes[row, col]
+            print(row+ col*n_rows)
+            ax.imshow(image_list[row + col*n_rows])
+            ax.axis('off')
+            if row == 0:
+                ax.set_title(args.effects[col])
+
+    plt.tight_layout()
+    plt.show()
 
 
 if (__name__ == "__main__"):
