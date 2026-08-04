@@ -51,6 +51,7 @@ def effect_crop(img_arr, rows, crop_factor):
     print(len(img_arr))
     return img_arr
 
+
 def effect_skew(img_arr, rows, skew_factor):
     for i in range(rows):
         image = img_arr[i].copy()
@@ -69,6 +70,7 @@ def effect_skew(img_arr, rows, skew_factor):
     print(len(img_arr))
     return img_arr
 
+
 def effect_rotation(img_arr, rows, rads):
     for i in range(rows):
         image = img_arr[i].copy()
@@ -85,6 +87,7 @@ def effect_rotation(img_arr, rows, rads):
     print(len(img_arr))
     return img_arr
 
+
 def effect_blur(img_arr, rows, blurfactor):
     blurfactor /= 100.0
     for i in range(rows):
@@ -97,5 +100,15 @@ def effect_blur(img_arr, rows, blurfactor):
         kw += 1 - kw % 2
         blurred = cv2.GaussianBlur(image, (kh, kw), 0)
         img_arr.append(blurred)
+    print(len(img_arr))
+    return img_arr
+
+
+def effect_contrast(img_arr, rows, factor):
+    for i in range(rows):
+        image = img_arr[i].copy()
+
+        out = cv2.multiply(image, factor)
+        img_arr.append(out)
     print(len(img_arr))
     return img_arr
