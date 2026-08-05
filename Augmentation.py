@@ -31,6 +31,10 @@ def parse_args():
         "-E", "--effects-help", action="store_true",
         help="Print the list of effects available for the -e option"
     )
+    parser.add_argument(
+        "-g", "--no-gui", action="store_true",
+        help="Disable the GUI preview window"
+    )
     args = parser.parse_args()
     if (not args.input_list and not args.effects_help):
         parser.error("Either enter a list of input images with -i or "
@@ -45,16 +49,28 @@ def parse_args():
     return args
 
 
-def main():
-    args = parse_args()
-    image_list = []
-    for filename in args.input_list:
-        image_list.append(ski.io.imread(filename))
+CHUNK_SIZE = 50
 
-    args.effects.insert(0, "NONE")
-    n_rows = len(image_list)
-    n_cols = len(args.effects)
-    for effect in args.effects:
+
+def save_augmented_images(image_list, filenames, effects, n_rows):
+    base_dir = "augmented_directory"
+    for col, effect in enumerate(effects):
+        if (effect == "NONE"):
+            continue
+        for row in range(n_rows):
+            filename = filenames[row]
+            leaf_type = os.path.basename(os.path.dirname(filename))
+            out_dir = os.path.join(base_dir, leaf_type)
+            os.makedirs(out_dir, exist_ok=True)
+
+            name, ext = os.path.splitext(os.path.basename(filename))
+            out_path = os.path.join(out_dir, f"{name}_{effect}{ext}")
+            image = image_list[row + col*n_rows]
+            ski.io.imsave(out_path, image)
+
+
+def apply_effects(image_list, effects, n_rows):
+    for effect in effects:
         match effect:
             case EffectName.ZOOM.name:
                 image_list = effect_zoom(image_list, n_rows, 1.6)
@@ -72,23 +88,74 @@ def main():
                 image_list = effect_brightness(image_list, n_rows, -0.5)
             case _:
                 pass
+    return image_list
+
+
+def process_chunk(filenames, effects):
+    image_list = []
+    for filename in filenames:
+        image_list.append(ski.io.imread(filename))
+    n_rows = len(image_list)
+    image_list = apply_effects(image_list, effects, n_rows)
+    save_augmented_images(image_list, filenames, effects, n_rows)
+    return image_list
+
+
+def show_preview(image_list, effects, n_rows):
+    n_cols = len(effects)
+    max_display_rows = 10
+    display_rows = min(n_rows, max_display_rows)
     inches = 2
     fig, axes = plt.subplots(
-        n_rows,
+        display_rows,
         n_cols,
-        figsize=(n_cols * inches, n_rows * inches)
+        figsize=(n_cols * inches, display_rows * inches)
     )
 
     for col in range(n_cols):
-        for row in range(n_rows):
+        for row in range(display_rows):
             ax = axes[row, col]
             ax.imshow(image_list[row + col*n_rows])
             ax.axis('off')
             if row == 0:
-                ax.set_title(args.effects[col])
+                ax.set_title(effects[col])
 
     plt.tight_layout()
     plt.show()
+
+
+def main():
+    args = parse_args()
+    if (args.effects_help):
+        return
+
+    args.effects.insert(0, "NONE")
+    total = len(args.input_list)
+    n_chunks = (total + CHUNK_SIZE - 1) // CHUNK_SIZE
+    preview = None
+
+    for chunk_idx in range(n_chunks):
+        start = chunk_idx * CHUNK_SIZE
+        end = min(start + CHUNK_SIZE, total)
+        chunk_filenames = args.input_list[start:end]
+
+        print(
+            f"[{chunk_idx + 1}/{n_chunks}] processing images "
+            f"{start + 1}-{end} of {total}..."
+        )
+        image_list = process_chunk(chunk_filenames, args.effects)
+        print(f"[{chunk_idx + 1}/{n_chunks}] saved "
+              f"{len(chunk_filenames)} images to disk")
+
+        if (chunk_idx == 0 and not args.no_gui):
+            preview = (image_list, len(chunk_filenames))
+
+    print(f"Done, {total} images processed.")
+
+    if (preview is None):
+        return
+    preview_images, preview_rows = preview
+    show_preview(preview_images, args.effects, preview_rows)
 
 
 if (__name__ == "__main__"):
