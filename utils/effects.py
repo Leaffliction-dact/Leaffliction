@@ -93,10 +93,14 @@ def effect_rotation(img_arr, rows, rads):
         degrees = math.degrees(rs)
         matrix = cv2.getRotationMatrix2D((w / 2, h / 2), degrees, 1.0)
 
-        rotated = cv2.warpAffine(image, matrix, (w, h),
-                                flags=cv2.INTER_LINEAR,
-                                borderMode=cv2.BORDER_CONSTANT,
-                                borderValue=0)
+        rotated = cv2.warpAffine(
+            image,
+            matrix,
+            (w, h),
+            flags=cv2.INTER_LINEAR,
+            borderMode=cv2.BORDER_CONSTANT,
+            borderValue=0
+        )
         img_arr.append(rotated)
     return img_arr
 

@@ -73,8 +73,11 @@ def main():
             case _:
                 pass
     inches = 2
-    fig, axes = plt.subplots(n_rows, n_cols,
-            figsize=(n_cols * inches, n_rows * inches))
+    fig, axes = plt.subplots(
+        n_rows,
+        n_cols,
+        figsize=(n_cols * inches, n_rows * inches)
+    )
 
     for col in range(n_cols):
         for row in range(n_rows):
