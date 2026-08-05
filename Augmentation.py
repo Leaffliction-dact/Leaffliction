@@ -1,4 +1,4 @@
-import skimage as ski
+import cv2
 import os
 import argparse
 import matplotlib.pyplot as plt
@@ -99,7 +99,7 @@ def save_augmented_images(
                 continue
             os.makedirs(os.path.dirname(out_path), exist_ok=True)
             image = image_list[row + col*n_rows]
-            ski.io.imsave(out_path, image)
+            cv2.imwrite(out_path, image)
             saved += 1
     return saved, skipped
 
@@ -143,7 +143,7 @@ def process_chunk(filenames, effects, output_dir, overwrite):
 
     image_list = []
     for filename in to_process:
-        image_list.append(ski.io.imread(filename))
+        image_list.append(cv2.imread(filename))
     n_rows = len(image_list)
     image_list = apply_effects(image_list, effects, n_rows)
     saved_images, extra_skipped = save_augmented_images(
@@ -167,7 +167,9 @@ def show_preview(image_list, effects, n_rows):
     for col in range(n_cols):
         for row in range(display_rows):
             ax = axes[row, col]
-            ax.imshow(image_list[row + col*n_rows])
+            image = image_list[row + col*n_rows]
+            rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            ax.imshow(rgb_image)
             ax.axis('off')
             if row == 0:
                 ax.set_title(effects[col])
