@@ -40,6 +40,11 @@ def parse_args():
         help="Directory to write augmented images into "
              "(default: augmented_directory)"
     )
+    parser.add_argument(
+        "-w", "--overwrite", action="store_true",
+        help="Reprocess images even if their outputs already exist, "
+             "overwriting them"
+    )
     args = parser.parse_args()
     if (not args.input_list and not args.effects_help):
         parser.error("Either enter a list of input images with -i or "
@@ -57,18 +62,31 @@ def parse_args():
 CHUNK_SIZE = 50
 
 
+def get_output_path(filename, effect, base_dir):
+    leaf_type = os.path.basename(os.path.dirname(filename))
+    out_dir = os.path.join(base_dir, leaf_type)
+    name, ext = os.path.splitext(os.path.basename(filename))
+    return os.path.join(out_dir, f"{name}_{effect}{ext}")
+
+
+def is_already_processed(filename, effects, base_dir):
+    for effect in effects:
+        if (effect == "NONE"):
+            continue
+        out_path = get_output_path(filename, effect, base_dir)
+        if (not os.path.exists(out_path)):
+            return False
+    return True
+
+
 def save_augmented_images(image_list, filenames, effects, n_rows, base_dir):
     for col, effect in enumerate(effects):
         if (effect == "NONE"):
             continue
         for row in range(n_rows):
             filename = filenames[row]
-            leaf_type = os.path.basename(os.path.dirname(filename))
-            out_dir = os.path.join(base_dir, leaf_type)
-            os.makedirs(out_dir, exist_ok=True)
-
-            name, ext = os.path.splitext(os.path.basename(filename))
-            out_path = os.path.join(out_dir, f"{name}_{effect}{ext}")
+            out_path = get_output_path(filename, effect, base_dir)
+            os.makedirs(os.path.dirname(out_path), exist_ok=True)
             image = image_list[row + col*n_rows]
             ski.io.imsave(out_path, image)
 
@@ -95,14 +113,28 @@ def apply_effects(image_list, effects, n_rows):
     return image_list
 
 
-def process_chunk(filenames, effects, output_dir):
-    image_list = []
+def process_chunk(filenames, effects, output_dir, overwrite):
+    to_process = []
+    skipped = 0
     for filename in filenames:
+        if (not overwrite
+                and is_already_processed(filename, effects, output_dir)):
+            skipped += 1
+            continue
+        to_process.append(filename)
+
+    if (not to_process):
+        return [], to_process, skipped
+
+    image_list = []
+    for filename in to_process:
         image_list.append(ski.io.imread(filename))
     n_rows = len(image_list)
     image_list = apply_effects(image_list, effects, n_rows)
-    save_augmented_images(image_list, filenames, effects, n_rows, output_dir)
-    return image_list
+    save_augmented_images(
+        image_list, to_process, effects, n_rows, output_dir
+    )
+    return image_list, to_process, skipped
 
 
 def show_preview(image_list, effects, n_rows):
@@ -147,14 +179,19 @@ def main():
             f"[{chunk_idx + 1}/{n_chunks}] processing images "
             f"{start + 1}-{end} of {total}..."
         )
-        image_list = process_chunk(
-            chunk_filenames, args.effects, args.output_dir
+        image_list, processed_filenames, skipped = process_chunk(
+            chunk_filenames, args.effects, args.output_dir, args.overwrite
         )
-        print(f"[{chunk_idx + 1}/{n_chunks}] saved "
-              f"{len(chunk_filenames)} images to disk")
+        if (skipped):
+            print(f"[{chunk_idx + 1}/{n_chunks}] skipped {skipped} "
+                  "already-processed images")
+        if (processed_filenames):
+            print(f"[{chunk_idx + 1}/{n_chunks}] saved "
+                  f"{len(processed_filenames)} images to disk")
 
-        if (chunk_idx == 0 and not args.no_gui):
-            preview = (image_list, len(chunk_filenames))
+        if (preview is None and processed_filenames
+                and not args.no_gui):
+            preview = (image_list, len(processed_filenames))
 
     print(f"Done, {total} images processed.")
 
