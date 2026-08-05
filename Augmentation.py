@@ -35,6 +35,11 @@ def parse_args():
         "-g", "--no-gui", action="store_true",
         help="Disable the GUI preview window"
     )
+    parser.add_argument(
+        "-o", "--output-dir", default="augmented_directory",
+        help="Directory to write augmented images into "
+             "(default: augmented_directory)"
+    )
     args = parser.parse_args()
     if (not args.input_list and not args.effects_help):
         parser.error("Either enter a list of input images with -i or "
@@ -52,8 +57,7 @@ def parse_args():
 CHUNK_SIZE = 50
 
 
-def save_augmented_images(image_list, filenames, effects, n_rows):
-    base_dir = "augmented_directory"
+def save_augmented_images(image_list, filenames, effects, n_rows, base_dir):
     for col, effect in enumerate(effects):
         if (effect == "NONE"):
             continue
@@ -91,13 +95,13 @@ def apply_effects(image_list, effects, n_rows):
     return image_list
 
 
-def process_chunk(filenames, effects):
+def process_chunk(filenames, effects, output_dir):
     image_list = []
     for filename in filenames:
         image_list.append(ski.io.imread(filename))
     n_rows = len(image_list)
     image_list = apply_effects(image_list, effects, n_rows)
-    save_augmented_images(image_list, filenames, effects, n_rows)
+    save_augmented_images(image_list, filenames, effects, n_rows, output_dir)
     return image_list
 
 
@@ -143,7 +147,9 @@ def main():
             f"[{chunk_idx + 1}/{n_chunks}] processing images "
             f"{start + 1}-{end} of {total}..."
         )
-        image_list = process_chunk(chunk_filenames, args.effects)
+        image_list = process_chunk(
+            chunk_filenames, args.effects, args.output_dir
+        )
         print(f"[{chunk_idx + 1}/{n_chunks}] saved "
               f"{len(chunk_filenames)} images to disk")
 
