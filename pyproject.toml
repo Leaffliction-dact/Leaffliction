@@ -5,8 +5,10 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "flake8>=7.3.0",
     "matplotlib>=3.11.1",
     "numpy>=2.5.1",
+    "opencv-python-headless>=5.0.0.93",
     "pandas>=3.0.5",
     "pathlib>=1.0.1",
     "pyqt6>=6.11.0",
