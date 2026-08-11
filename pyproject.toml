@@ -12,6 +12,7 @@ dependencies = [
     "pandas>=3.0.5",
     "pathlib>=1.0.1",
     "pyqt6>=6.11.0",
+    "scikit-learn>=1.9.0",
     "seaborn>=0.13.2",
 ]
 
