@@ -11,11 +11,13 @@ import torch
 import torch.nn as nn
 from plantcv import plantcv as pcv
 from sklearn.model_selection import train_test_split
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader
 
 from Augmentation import apply_effects
 from utils.dataset import discover_class_images
 from utils.effects import EffectName
+from leafcnn import LeafCNN
+from leafset import LeafDataset
 
 # start small for iteration speed try 224/256 later
 INPUT_SIZE = (128, 128)
@@ -47,7 +49,7 @@ def discover_classes(root: Path, max_images_per_class=None):
 
     samples = []
     for class_name, images in class_images.items():
-        if max_images_per_class is not None:
+        if (max_images_per_class is not None):
             images = images[:max_images_per_class]
         for path in images:
             samples.append((path, class_name))
@@ -65,7 +67,7 @@ def mask_and_resize(img: np.ndarray, size=INPUT_SIZE) -> np.ndarray:
 
 
 def augmented_count_needed(class_count: int, max_count: int) -> int:
-    if class_count >= max_count:
+    if (class_count >= max_count):
         return 0
     target_count = min(max_count, class_count * MAX_CLASS_SIZE_MULTIPLIER)
     return target_count - class_count
@@ -74,9 +76,9 @@ def augmented_count_needed(class_count: int, max_count: int) -> int:
 def _process_and_save(raw_path: Path, out_dir: Path, effect_name=None):
     img = cv2.imread(str(raw_path))
 
-    if effect_name is None:
+    if (effect_name is None):
         img = mask_and_resize(img)
-    elif AUGMENT_BEFORE_MASK:
+    elif (AUGMENT_BEFORE_MASK):
         img = apply_effects([img], [effect_name], 1)[1]
         img = mask_and_resize(img)
     else:
@@ -84,7 +86,7 @@ def _process_and_save(raw_path: Path, out_dir: Path, effect_name=None):
         img = apply_effects([img], [effect_name], 1)[1]
 
     tag = effect_name
-    if tag is None:
+    if (tag is None):
         tag = "orig"
     out_path = out_dir / f"{raw_path.stem}_{tag}.jpg"
     cv2.imwrite(str(out_path), img)
@@ -103,7 +105,7 @@ def prepare_split(
     for raw_path, cls in samples:
         class_paths.setdefault(cls, []).append(raw_path)
 
-    if needs_augmenting:
+    if (needs_augmenting):
         max_count = max(len(paths) for paths in class_paths.values())
 
     effect_names = [effect.name for effect in EffectName]
@@ -121,7 +123,7 @@ def prepare_split(
             processed += 1
             print(f"  [{processed:4d}/{total}] {cls}/{raw_path.name}")
 
-        if needs_augmenting:
+        if (needs_augmenting):
             n_needed = augmented_count_needed(len(raw_paths), max_count)
             combos = [
                 (raw_path, name)
@@ -135,40 +137,6 @@ def prepare_split(
             print(f"    +{len(chosen)} augmented for {cls}")
 
     return prepared
-
-
-class LeafDataset(Dataset):
-    def __init__(self, samples):
-        self.samples = samples
-
-    def __len__(self):
-        return len(self.samples)
-
-    def __getitem__(self, i):
-        path, label = self.samples[i]
-        img = cv2.imread(str(path))
-        arr = img.astype(np.float32) / 255.0
-        # HWC -> CHW for arch purposes I guess?
-        tensor = torch.from_numpy(arr).permute(2, 0, 1)
-        return tensor, label
-
-
-class LeafCNN(nn.Module):
-    def __init__(self, num_classes: int):
-        super().__init__()
-        self.features = nn.Sequential(
-            nn.Conv2d(3, 32, 3, padding=1), nn.ReLU(), nn.MaxPool2d(2),
-            nn.Conv2d(32, 64, 3, padding=1), nn.ReLU(), nn.MaxPool2d(2),
-            nn.Conv2d(64, 128, 3, padding=1), nn.ReLU(), nn.MaxPool2d(2),
-        )
-        self.classifier = nn.Sequential(
-            nn.AdaptiveAvgPool2d(1), nn.Flatten(),
-            nn.Dropout(DROPOUT_P),
-            nn.Linear(128, num_classes),
-        )
-
-    def forward(self, x):
-        return self.classifier(self.features(x))
 
 
 def build_class_weights(train_samples, class_to_idx, device):
@@ -238,17 +206,17 @@ def train(
                 f"val_acc={val_acc:.4f}  val_loss={val_loss:.4f}"
             )
 
-            if val_acc > best_val_acc:
+            if (val_acc > best_val_acc):
                 best_val_acc = val_acc
                 torch.save(model.state_dict(), "best_model.pt")
 
-            if val_loss < best_val_loss:
+            if (val_loss < best_val_loss):
                 best_val_loss = val_loss
                 epochs_without_improvement = 0
             else:
                 epochs_without_improvement += 1
 
-            if epochs_without_improvement >= patience:
+            if (epochs_without_improvement >= patience):
                 print(f"no val_loss improvement for {patience} epochs, "
                       "stopping early")
                 break
@@ -288,14 +256,20 @@ def main():
         "-d", "--device", choices=["cpu", "cuda"], default="cpu",
         help="Device to train on (default: cpu)"
     )
+    parser.add_argument(
+        "-D", "--dropout", type=float, default=0.3,
+        help="Dropout percentage (0.0 to 0.9, default 0.3)"
+    )
     args = parser.parse_args()
 
-    if args.device == "cuda" and not torch.cuda.is_available():
+    if (args.device == "cuda" and not torch.cuda.is_available()):
         parser.error("CUDA requested but not available on this machine")
+    if (not (0.0 <= args.dropout <= 0.9)):
+        parser.error("Valid dropout % range: 0.0 to 0.9")
     device = torch.device(args.device)
     use_cuda = device.type == "cuda"
 
-    if CACHE_DIR.exists():
+    if (CACHE_DIR.exists()):
         shutil.rmtree(CACHE_DIR)
 
     raw_samples, class_to_idx = discover_classes(
@@ -338,7 +312,10 @@ def main():
         pin_memory=use_cuda
     )
 
-    model = LeafCNN(num_classes=len(class_to_idx)).to(device)
+    model = LeafCNN(
+        num_classes=len(class_to_idx),
+        d_o_p=args.dropout
+    ).to(device)
     class_weights = build_class_weights(train_samples, class_to_idx, device)
     criterion = nn.CrossEntropyLoss(weight=class_weights)
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
@@ -358,5 +335,5 @@ def main():
     package_outputs(class_to_idx)
 
 
-if __name__ == "__main__":
+if (__name__ == "__main__"):
     main()
