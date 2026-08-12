@@ -257,8 +257,22 @@ def main():
         help="Device to train on (default: cpu)"
     )
     parser.add_argument(
-        "-D", "--dropout", type=float, default=0.3,
-        help="Dropout percentage (0.0 to 0.9, default 0.3)"
+        "-D", "--dropout", type=float, default=DROPOUT_P,
+        help=f"Dropout percentage (0.0 to 0.9, default {DROPOUT_P})"
+    )
+    parser.add_argument(
+        "-I", "--input-size", type=int, default=INPUT_SIZE,
+        help="The size to which the inputs will be scaled, in pixels, "
+             "one side only (since the inputs are squares)."
+             "\nDefault is {INPUT_SIZE[0]}, ranges 16..512"
+    )
+    parser.add_argument(
+        "-B", "--batch-size", type=int, default=BATCH_SIZE,
+        help=f"Batch size (2..1024, default {BATCH_SIZE})"
+    )
+    parser.add_argument(
+        "-L", "--learning-rate", type=float, default=LEARNING_RATE,
+        help=f"Learning rate (0.0 to 1.0, default {LEARNING_RATE})"
     )
     args = parser.parse_args()
 
@@ -266,6 +280,16 @@ def main():
         parser.error("CUDA requested but not available on this machine")
     if (not (0.0 <= args.dropout <= 0.9)):
         parser.error("Valid dropout % range: 0.0 to 0.9")
+    if (args.epochs < 1):
+        parser.error("Please enter a positive number of epochs instead")
+    if (not (16 <= args.input_size <= 512)):
+        parser.error("Your input size is quite unreasonable in my opinion")
+    if (not (2 <= args.batch_size <= 1024)):
+        parser.error("Your batch size is quite unreasonable in my opinion")
+    if (not (0.0 <= args.learning_rate <= 1.0)):
+        parser.error(
+            "The learning rate specified is found to be quite invalid"
+        )
     device = torch.device(args.device)
     use_cuda = device.type == "cuda"
 
