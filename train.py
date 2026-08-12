@@ -1,5 +1,6 @@
 import argparse
 import json
+import random
 import shutil
 import zipfile
 from pathlib import Path
@@ -26,8 +27,8 @@ DROPOUT_P = 0.3
 MAX_EPOCHS = 50
 PATIENCE = 7
 
-# maybe 3?
-MAX_AUGMENTS_PER_IMAGE = 4
+# for augs
+MAX_CLASS_SIZE_MULTIPLIER = 3
 
 # seemingly better for 'realism' and prediction later.
 AUGMENT_BEFORE_MASK = True
@@ -35,12 +36,13 @@ AUGMENT_BEFORE_MASK = True
 # r.i.p. RX 470
 DEVICE = torch.device("cpu")
 
-CACHE_DIR = Path("./_prepared_data")
+CACHE_DIR = Path("~/sgoinfre/_prepared_data").expanduser()
 TRAIN_CACHE = CACHE_DIR / "train"
 VAL_CACHE = CACHE_DIR / "val"
+OUT_DIR = Path("~/sgoinfre/leafzip").expanduser()
 
 
-def discover_classes(root: Path):
+def discover_classes(root: Path, max_images_per_class=None):
     class_images = discover_class_images(root)
     class_to_idx = {
         name: i for i, name in enumerate(sorted(class_images))
@@ -48,6 +50,8 @@ def discover_classes(root: Path):
 
     samples = []
     for class_name, images in class_images.items():
+        if max_images_per_class is not None:
+            images = images[:max_images_per_class]
         for path in images:
             samples.append((path, class_name))
 
@@ -63,17 +67,11 @@ def mask_and_resize(img: np.ndarray, size=INPUT_SIZE) -> np.ndarray:
     return cv2.resize(masked, size)
 
 
-# each class has a different amt of input images, so augs need to
-# vary accordingly to fill up the input amounts to an adequate
-# margin. but not too much ofc to avoid overfit
-def augments_needed_for_class(class_count: int, max_count: int) -> int:
+def augmented_count_needed(class_count: int, max_count: int) -> int:
     if class_count >= max_count:
         return 0
-    ratio_needed = max_count / class_count
-    n = min(int(round(ratio_needed)) - 1,
-            MAX_AUGMENTS_PER_IMAGE,
-            len(EffectName))
-    return max(n, 0)
+    target_count = min(max_count, class_count * MAX_CLASS_SIZE_MULTIPLIER)
+    return target_count - class_count
 
 
 def _process_and_save(raw_path: Path, out_dir: Path, effect_name=None):
@@ -91,39 +89,53 @@ def _process_and_save(raw_path: Path, out_dir: Path, effect_name=None):
     tag = effect_name
     if tag is None:
         tag = "orig"
-    out_path = out_dir / f"{raw_path.stem}_{tag}.png"
+    out_path = out_dir / f"{raw_path.stem}_{tag}.jpg"
     cv2.imwrite(str(out_path), img)
     return out_path
 
 
-def prepare_split(samples,
+def prepare_split(
+        samples,
         class_to_idx,
         out_dir: Path,
         needs_augmenting: bool):
     out_dir.mkdir(parents=True, exist_ok=True)
     prepared = []
 
+    class_paths = {}
+    for raw_path, cls in samples:
+        class_paths.setdefault(cls, []).append(raw_path)
+
     if needs_augmenting:
-        counts = {}
-        for _, cls in samples:
-            counts[cls] = counts.get(cls, 0) + 1
-        max_count = max(counts.values())
+        max_count = max(len(paths) for paths in class_paths.values())
 
     effect_names = [effect.name for effect in EffectName]
 
-    for raw_path, cls in samples:
+    total = len(samples)
+    processed = 0
+    for cls, raw_paths in class_paths.items():
         class_dir = out_dir / cls
         class_dir.mkdir(exist_ok=True)
         label = class_to_idx[cls]
 
-        p = _process_and_save(raw_path, class_dir)
-        prepared.append((p, label))
+        for raw_path in raw_paths:
+            p = _process_and_save(raw_path, class_dir)
+            prepared.append((p, label))
+            processed += 1
+            print(f"  [{processed:4d}/{total}] {cls}/{raw_path.name}")
 
         if needs_augmenting:
-            n = needs_augmentings_needed_for_class(counts[cls], max_count)
-            for name in effect_names[:n]:
+            n_needed = augmented_count_needed(len(raw_paths), max_count)
+            combos = [
+                (raw_path, name)
+                for raw_path in raw_paths
+                for name in effect_names
+            ]
+            chosen = random.sample(combos, min(n_needed, len(combos)))
+            for raw_path, name in chosen:
                 p = _process_and_save(raw_path, class_dir, effect_name=name)
                 prepared.append((p, label))
+            print(f"    +{len(chosen)} augmented for {cls}")
 
     return prepared
 
@@ -205,66 +217,82 @@ def train(
     best_val_loss = float("inf")
     epochs_without_improvement = 0
 
-    for epoch in range(max_epochs):
-        model.train()
-        for images, labels in train_loader:
-            images, labels = images.to(device), labels.to(device)
-            logits = model(images)
-            loss = criterion(logits, labels)
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+    try:
+        for epoch in range(max_epochs):
+            model.train()
+            for images, labels in train_loader:
+                images, labels = images.to(device), labels.to(device)
+                logits = model(images)
+                loss = criterion(logits, labels)
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
 
-        model.eval()
-        with torch.no_grad():
-            val_acc, val_loss = evaluate(
-                model, val_loader, criterion, device
+            model.eval()
+            with torch.no_grad():
+                val_acc, val_loss = evaluate(
+                    model, val_loader, criterion, device
+                )
+
+            print(
+                f"epoch {epoch + 1:4d}/{max_epochs}  "
+                f"val_acc={val_acc:.4f}  val_loss={val_loss:.4f}"
             )
 
-        print(
-            f"epoch {epoch + 1:4d}/{max_epochs}  "
-            f"val_acc={val_acc:.4f}  val_loss={val_loss:.4f}"
-        )
+            if val_acc > best_val_acc:
+                best_val_acc = val_acc
+                torch.save(model.state_dict(), "best_model.pt")
 
-        if val_acc > best_val_acc:
-            best_val_acc = val_acc
-            torch.save(model.state_dict(), "best_model.pt")
+            if val_loss < best_val_loss:
+                best_val_loss = val_loss
+                epochs_without_improvement = 0
+            else:
+                epochs_without_improvement += 1
 
-        if val_loss < best_val_loss:
-            best_val_loss = val_loss
-            epochs_without_improvement = 0
-        else:
-            epochs_without_improvement += 1
-
-        if epochs_without_improvement >= patience:
-            print(f"no val_loss improvement for {patience} epochs, "
-                  "stopping early")
-            break
+            if epochs_without_improvement >= patience:
+                print(f"no val_loss improvement for {patience} epochs, "
+                      "stopping early")
+                break
+    except KeyboardInterrupt:
+        print("Stopping & saving best results")
 
     return best_val_acc
 
 
-def package_outputs(class_to_idx, zip_path="learnings.zip"):
-    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+def package_outputs(class_to_idx, zip_name="learnings.zip"):
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    zip_name = OUT_DIR / zip_name
+    with zipfile.ZipFile(zip_name, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.write("best_model.pt")
 
         with open("class_to_idx.json", "w") as f:
             json.dump(class_to_idx, f)
         zf.write("class_to_idx.json")
 
-        for path in TRAIN_CACHE.rglob("*.png"):
+        for path in TRAIN_CACHE.rglob("*.jpg"):
             zf.write(path, arcname=str(path.relative_to(CACHE_DIR.parent)))
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("directory", type=Path)
+    parser.add_argument(
+        "-n", "--max-images-per-class", type=int, default=None,
+        help="Cap the number of input images read per class "
+             "(default: none)"
+    )
+    parser.add_argument(
+        "-e", "--epochs", type=int, default=MAX_EPOCHS,
+        help=f"Maximum number of training epochs (default: {MAX_EPOCHS})"
+    )
     args = parser.parse_args()
 
     if CACHE_DIR.exists():
         shutil.rmtree(CACHE_DIR)
 
-    raw_samples, class_to_idx = discover_classes(args.directory)
+    raw_samples, class_to_idx = discover_classes(
+        args.directory, max_images_per_class=args.max_images_per_class
+    )
 
     labels_for_split = [cls for _, cls in raw_samples]
     train_raw, val_raw = train_test_split(
@@ -274,17 +302,19 @@ def main():
         random_state=42
     )
 
+    print(f"preparing train split ({len(train_raw)} images)")
     train_samples = prepare_split(
         train_raw,
         class_to_idx,
         TRAIN_CACHE,
-        augment=True
+        needs_augmenting=True
     )
+    print(f"preparing valdation split ({len(val_raw)} images)")
     val_samples = prepare_split(
         val_raw,
         class_to_idx,
         VAL_CACHE,
-        augment=False
+        needs_augmenting=False
     )
 
     train_loader = DataLoader(
@@ -310,7 +340,7 @@ def main():
         criterion,
         optimizer,
         DEVICE,
-        MAX_EPOCHS,
+        args.epochs,
         PATIENCE,
     )
     print(f"best val_acc: {best_val_acc:.4f}")
