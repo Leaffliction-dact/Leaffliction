@@ -33,9 +33,6 @@ MAX_CLASS_SIZE_MULTIPLIER = 3
 # seemingly better for 'realism' and prediction later.
 AUGMENT_BEFORE_MASK = True
 
-# r.i.p. RX 470
-DEVICE = torch.device("cpu")
-
 CACHE_DIR = Path("~/sgoinfre/_prepared_data").expanduser()
 TRAIN_CACHE = CACHE_DIR / "train"
 VAL_CACHE = CACHE_DIR / "val"
@@ -194,7 +191,8 @@ def evaluate(model, loader, criterion, device):
     correct, total = 0, 0
     total_loss = 0.0
     for images, labels in loader:
-        images, labels = images.to(device), labels.to(device)
+        images = images.to(device, non_blocking=True)
+        labels = labels.to(device, non_blocking=True)
         logits = model(images)
         loss = criterion(logits, labels)
         total_loss += loss.item() * labels.size(0)
@@ -221,7 +219,8 @@ def train(
         for epoch in range(max_epochs):
             model.train()
             for images, labels in train_loader:
-                images, labels = images.to(device), labels.to(device)
+                images = images.to(device, non_blocking=True)
+                labels = labels.to(device, non_blocking=True)
                 logits = model(images)
                 loss = criterion(logits, labels)
                 optimizer.zero_grad()
@@ -285,7 +284,16 @@ def main():
         "-e", "--epochs", type=int, default=MAX_EPOCHS,
         help=f"Maximum number of training epochs (default: {MAX_EPOCHS})"
     )
+    parser.add_argument(
+        "-d", "--device", choices=["cpu", "cuda"], default="cpu",
+        help="Device to train on (default: cpu)"
+    )
     args = parser.parse_args()
+
+    if args.device == "cuda" and not torch.cuda.is_available():
+        parser.error("CUDA requested but not available on this machine")
+    device = torch.device(args.device)
+    use_cuda = device.type == "cuda"
 
     if CACHE_DIR.exists():
         shutil.rmtree(CACHE_DIR)
@@ -320,16 +328,18 @@ def main():
     train_loader = DataLoader(
         LeafDataset(train_samples),
         batch_size=BATCH_SIZE,
-        shuffle=True
+        shuffle=True,
+        pin_memory=use_cuda
     )
     val_loader = DataLoader(
         LeafDataset(val_samples),
         batch_size=BATCH_SIZE,
-        shuffle=False
+        shuffle=False,
+        pin_memory=use_cuda
     )
 
-    model = LeafCNN(num_classes=len(class_to_idx)).to(DEVICE)
-    class_weights = build_class_weights(train_samples, class_to_idx, DEVICE)
+    model = LeafCNN(num_classes=len(class_to_idx)).to(device)
+    class_weights = build_class_weights(train_samples, class_to_idx, device)
     criterion = nn.CrossEntropyLoss(weight=class_weights)
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
@@ -339,7 +349,7 @@ def main():
         model,
         criterion,
         optimizer,
-        DEVICE,
+        device,
         args.epochs,
         PATIENCE,
     )
