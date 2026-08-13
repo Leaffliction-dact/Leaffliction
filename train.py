@@ -20,7 +20,7 @@ from leafcnn import LeafCNN
 from leafset import LeafDataset
 
 # start small for iteration speed try 224/256 later
-INPUT_SIZE = (128, 128)
+INPUT_SIZE = 128
 BATCH_SIZE = 32
 LEARNING_RATE = 1e-3
 VAL_SPLIT = 0.15
@@ -63,7 +63,7 @@ def mask_and_resize(img: np.ndarray, size=INPUT_SIZE) -> np.ndarray:
     mask = pcv.threshold.otsu(gray_img=saturation, object_type="light")
     mask = pcv.fill(bin_img=mask, size=200)
     masked = pcv.apply_mask(img=img, mask=mask, mask_color="white")
-    return cv2.resize(masked, size)
+    return cv2.resize(masked, (size, size))
 
 
 def augmented_count_needed(class_count: int, max_count: int) -> int:
@@ -73,16 +73,21 @@ def augmented_count_needed(class_count: int, max_count: int) -> int:
     return target_count - class_count
 
 
-def _process_and_save(raw_path: Path, out_dir: Path, effect_name=None):
+def _process_and_save(
+        raw_path: Path,
+        out_dir: Path,
+        inpsize: int,
+        effect_name=None,
+        ):
     img = cv2.imread(str(raw_path))
 
     if (effect_name is None):
-        img = mask_and_resize(img)
+        img = mask_and_resize(img, inpsize)
     elif (AUGMENT_BEFORE_MASK):
         img = apply_effects([img], [effect_name], 1)[1]
-        img = mask_and_resize(img)
+        img = mask_and_resize(img, inpsize)
     else:
-        img = mask_and_resize(img)
+        img = mask_and_resize(img, inpsize)
         img = apply_effects([img], [effect_name], 1)[1]
 
     tag = effect_name
@@ -97,7 +102,8 @@ def prepare_split(
         samples,
         class_to_idx,
         out_dir: Path,
-        needs_augmenting: bool):
+        needs_augmenting: bool,
+        inpsize: int):
     out_dir.mkdir(parents=True, exist_ok=True)
     prepared = []
 
@@ -118,7 +124,7 @@ def prepare_split(
         label = class_to_idx[cls]
 
         for raw_path in raw_paths:
-            p = _process_and_save(raw_path, class_dir)
+            p = _process_and_save(raw_path, class_dir, inpsize=inpsize)
             prepared.append((p, label))
             processed += 1
             print(f"  [{processed:4d}/{total}] {cls}/{raw_path.name}")
@@ -132,7 +138,12 @@ def prepare_split(
             ]
             chosen = random.sample(combos, min(n_needed, len(combos)))
             for raw_path, name in chosen:
-                p = _process_and_save(raw_path, class_dir, effect_name=name)
+                p = _process_and_save(
+                    raw_path,
+                    class_dir,
+                    effect_name=name,
+                    inpsize=inpsize
+                )
                 prepared.append((p, label))
             print(f"    +{len(chosen)} augmented for {cls}")
 
@@ -264,7 +275,7 @@ def main():
         "-I", "--input-size", type=int, default=INPUT_SIZE,
         help="The size to which the inputs will be scaled, in pixels, "
              "one side only (since the inputs are squares)."
-             "\nDefault is {INPUT_SIZE[0]}, ranges 16..512"
+             f"\nDefault is {INPUT_SIZE}, ranges 16..512"
     )
     parser.add_argument(
         "-B", "--batch-size", type=int, default=BATCH_SIZE,
@@ -313,25 +324,27 @@ def main():
         train_raw,
         class_to_idx,
         TRAIN_CACHE,
-        needs_augmenting=True
+        needs_augmenting=True,
+        inpsize=args.input_size
     )
     print(f"preparing valdation split ({len(val_raw)} images)")
     val_samples = prepare_split(
         val_raw,
         class_to_idx,
         VAL_CACHE,
-        needs_augmenting=False
+        needs_augmenting=False,
+        inpsize=args.input_size
     )
 
     train_loader = DataLoader(
         LeafDataset(train_samples),
-        batch_size=BATCH_SIZE,
+        batch_size=args.batch_size,
         shuffle=True,
         pin_memory=use_cuda
     )
     val_loader = DataLoader(
         LeafDataset(val_samples),
-        batch_size=BATCH_SIZE,
+        batch_size=args.batch_size,
         shuffle=False,
         pin_memory=use_cuda
     )
@@ -342,7 +355,7 @@ def main():
     ).to(device)
     class_weights = build_class_weights(train_samples, class_to_idx, device)
     criterion = nn.CrossEntropyLoss(weight=class_weights)
-    optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
 
     best_val_acc = train(
         train_loader,
