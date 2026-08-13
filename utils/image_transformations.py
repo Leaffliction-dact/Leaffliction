@@ -37,9 +37,10 @@ def transform_roi_object(img):
     return img
 
 
-def transform_analyze_object():
-    print("DEBUG:", "transform atalyze object not implemented.")
-    return None
+def transform_analyze_object(img):
+    mask = transform_mask(img)
+    img = pcv.analyze.size(img=img, labeled_mask=mask, n_labels=1)
+    return img
 
 
 def transform_pseudolandmarks():
