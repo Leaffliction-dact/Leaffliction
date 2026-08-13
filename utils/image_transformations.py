@@ -43,6 +43,22 @@ def transform_analyze_object(img):
     return img
 
 
-def transform_pseudolandmarks():
-    print("DEBUG:", "transform pseudolandmarks not implemented.")
-    return None
+def _render_landmarks(img, landmarks, color):
+    for landmark in landmarks:
+        x, y = landmark[0]
+        cv2.circle(img,
+                   (int(x), int(y)),
+                   radius=5,
+                   color=color,
+                   thickness=-1)
+
+
+def transform_pseudolandmarks(img):
+    mask = transform_mask(img)
+    img = img.copy()
+    top, bottom, center_v = pcv.homology.y_axis_pseudolandmarks(img=img,
+                                                                mask=mask)
+    _render_landmarks(img, top, (255, 0, 0))
+    _render_landmarks(img, bottom, (0, 255, 0))
+    _render_landmarks(img, center_v, (0, 0, 255))
+    return img

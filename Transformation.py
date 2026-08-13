@@ -51,7 +51,7 @@ def transform_image(img_filename):
     mask = transform_mask(original)
     roi_object = transform_roi_object(original)
     analyze_object = transform_analyze_object(original)
-    pseudolandmarks = transform_pseudolandmarks()
+    pseudolandmarks = transform_pseudolandmarks(original)
     return (original,
             gaussian_blur,
             mask,
@@ -85,6 +85,7 @@ def subcommand_show(args):
     ax3.imshow(cv2.cvtColor(transformed_images[2], cv2.COLOR_BGR2RGB))
     ax4.imshow(cv2.cvtColor(transformed_images[3], cv2.COLOR_BGR2RGB))
     ax5.imshow(cv2.cvtColor(transformed_images[4], cv2.COLOR_BGR2RGB))
+    ax6.imshow(cv2.cvtColor(transformed_images[5], cv2.COLOR_BGR2RGB))
     plt.show()
 
 
