@@ -49,7 +49,7 @@ def transform_image(img_filename):
     original, _, _ = pcv.readimage(filename=img_filename)
     gaussian_blur = transform_gaussian_blur(original)
     mask = transform_mask(original)
-    roi_object = transform_roi_object()
+    roi_object = transform_roi_object(original)
     analyze_object = transform_analyze_object()
     pseudolandmarks = transform_pseudolandmarks()
     return (original,
@@ -83,6 +83,7 @@ def subcommand_show(args):
     ax1.imshow(cv2.cvtColor(transformed_images[0], cv2.COLOR_BGR2RGB))
     ax2.imshow(cv2.cvtColor(transformed_images[1], cv2.COLOR_BGR2RGB))
     ax3.imshow(cv2.cvtColor(transformed_images[2], cv2.COLOR_BGR2RGB))
+    ax4.imshow(cv2.cvtColor(transformed_images[3], cv2.COLOR_BGR2RGB))
     plt.show()
 
 

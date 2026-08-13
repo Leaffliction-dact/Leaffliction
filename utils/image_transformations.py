@@ -1,4 +1,6 @@
 from plantcv import plantcv as pcv
+import cv2
+import numpy as np
 
 
 def transform_gaussian_blur(img):
@@ -20,9 +22,19 @@ def transform_mask(img):
     return img
 
 
-def transform_roi_object():
-    print("DEBUG:", "transform roi object not implemented.")
-    return None
+def transform_roi_object(img):
+    mask = transform_mask(img)
+    img = img.copy()
+    contours, hierarchy = cv2.findContours(mask,
+                                           cv2.RETR_TREE,
+                                           cv2.CHAIN_APPROX_SIMPLE)
+    for contour in contours:
+        x, y, w, h = cv2.boundingRect(contour)
+        cv2.rectangle(img, (x, y), (x + w, y + h), (255, 0, 0), 10)
+    mask = cv2.merge([mask, mask, mask])
+    green = np.full_like(img, (0, 255, 0))
+    img = np.where(mask == 0, img, green)
+    return img
 
 
 def transform_analyze_object():
