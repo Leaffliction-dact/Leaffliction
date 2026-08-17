@@ -39,22 +39,23 @@ def threashold(chanel):
     plt.figure("binary mask")
     plt.imshow(threashold)
 
-    return mask
+    return threashold
 
 
-def test1(mask):
-    num_labels, labels, stats, centroids = cv.connectedComponentsWithStats(mask, 8, cv.CV_32S)
-    print("test1:\t", num_labels)
-    print("test2:\t", labels)
-    print("test4:\t", stats)
-    print("test5:\t", centroids)
+def roi(img, mask):
+    _, _, stats, _ = cv.connectedComponentsWithStats(mask, 8, cv.CV_32S)
+    stats = stats[1, :-1]
     
-    plt.figure("connected_components")
-    plt.imshow(labels)
-    plt.colorbar()
+    img = img.copy()
+    roi = cv.rectangle(img, (stats[0], stats[1]), (stats[0] + stats[2], stats[1] + stats[3]), (255, 0, 0), 3)
+    roi = cv.cvtColor(roi, cv.COLOR_BGR2RGB)
+
+    plt.figure("roi")
+    plt.imshow(roi)
+    return (stats, roi)
 
 
-def flood_fill_mask(threashold):
+def flood_fill(threashold):
     floodfill = threashold.copy()
     
     h, w = threashold.shape[:2]
@@ -89,7 +90,8 @@ if __name__ == '__main__':
     chanel = chanel(img)
     plot_histogram(chanel)
     threashold = threashold(chanel)
-    mask = flod_fill_mask(mask)
-    test1(mask)
+    mask = flood_fill(threashold)
+    stats, roi = roi(img, mask)
+    print("stats:\t", stats)
     mask_img(mask, img)
     plt.show()
