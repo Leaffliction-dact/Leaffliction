@@ -1,14 +1,17 @@
-import cv2
+import cv2 as cv
 import argparse
 from plantcv import plantcv as pcv
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 from utils.image_transformations import (
     transform_gaussian_blur,
+    transform_chanel,
     transform_mask,
+    transform_roi_boundaries,
     transform_roi_object,
     transform_analyze_object,
     transform_pseudolandmarks,
+    transform_normalize,
 )
 
 
@@ -48,44 +51,56 @@ def parse_args():
 def transform_image(img_filename):
     original, _, _ = pcv.readimage(filename=img_filename)
     gaussian_blur = transform_gaussian_blur(original)
-    mask = transform_mask(original)
-    roi_object = transform_roi_object(original)
-    analyze_object = transform_analyze_object(original)
-    pseudolandmarks = transform_pseudolandmarks(original)
+    chanel = transform_chanel(gaussian_blur)
+    mask = transform_mask(chanel)
+    img_stats = transform_roi_boundaries(mask)
+    roi_object = transform_roi_object(original, img_stats)
+    analyze_object = transform_analyze_object(original, mask)
+    pseudolandmarks = transform_pseudolandmarks(original, mask)
+    normal_img = transform_normalize(original, mask, img_stats)
     return (original,
             gaussian_blur,
+            chanel,
             mask,
             roi_object,
             analyze_object,
-            pseudolandmarks)
+            pseudolandmarks,
+            normal_img)
 
 
 def subcommand_show(args):
     transformed_images = transform_image(args.img)
     # build the figure.
     fig = plt.figure(layout="constrained")
-    gs = GridSpec(3, 5, figure=fig)
+    gs = GridSpec(4, 6, figure=fig)
     ax1 = fig.add_subplot(gs[0, 0])
     ax2 = fig.add_subplot(gs[0, 1])
     ax3 = fig.add_subplot(gs[1, 0])
     ax4 = fig.add_subplot(gs[1, 1])
     ax5 = fig.add_subplot(gs[2, 0])
     ax6 = fig.add_subplot(gs[2, 1])
-    ax7 = fig.add_subplot(gs[:, 2:])
+    ax7 = fig.add_subplot(gs[3, 0])
+    ax8 = fig.add_subplot(gs[3, 1])
+    ax9 = fig.add_subplot(gs[:, 2:])
     ax1.set_title("Original")
     ax2.set_title("Gausian blur")
-    ax3.set_title("Mask")
-    ax4.set_title("Roi objects")
-    ax5.set_title("Analyze object")
-    ax6.set_title("Pseudolandmarks")
-    ax7.set_title("Color histogram")
+    ax3.set_title("Chanel")
+    ax4.set_title("Mask")
+    ax5.set_title("Roi objects")
+    ax6.set_title("Analyze object")
+    ax7.set_title("Pseudolandmarks")
+    ax8.set_title("normalize")
+    ax9.set_title("Color histogram")
     # plot all images.
-    ax1.imshow(cv2.cvtColor(transformed_images[0], cv2.COLOR_BGR2RGB))
-    ax2.imshow(cv2.cvtColor(transformed_images[1], cv2.COLOR_BGR2RGB))
-    ax3.imshow(cv2.cvtColor(transformed_images[2], cv2.COLOR_BGR2RGB))
-    ax4.imshow(cv2.cvtColor(transformed_images[3], cv2.COLOR_BGR2RGB))
-    ax5.imshow(cv2.cvtColor(transformed_images[4], cv2.COLOR_BGR2RGB))
-    ax6.imshow(cv2.cvtColor(transformed_images[5], cv2.COLOR_BGR2RGB))
+    ax1.imshow(cv.cvtColor(transformed_images[0], cv.COLOR_BGR2RGB))
+    ax2.imshow(cv.cvtColor(transformed_images[1], cv.COLOR_BGR2RGB))
+    ax3.imshow(cv.cvtColor(transformed_images[2], cv.COLOR_BGR2RGB))
+    ax4.imshow(cv.cvtColor(transformed_images[3], cv.COLOR_BGR2RGB))
+    ax5.imshow(cv.cvtColor(transformed_images[4], cv.COLOR_BGR2RGB))
+    ax6.imshow(cv.cvtColor(transformed_images[5], cv.COLOR_BGR2RGB))
+    ax7.imshow(cv.cvtColor(transformed_images[6], cv.COLOR_BGR2RGB))
+    ax8.imshow(cv.cvtColor(transformed_images[7], cv.COLOR_BGR2RGB))
+
     plt.show()
 
 
