@@ -20,6 +20,7 @@ from leafcnn import LeafCNN
 from leafset import LeafDataset
 
 # start small for iteration speed try 224/256 later
+# btw, 64 apparently works great
 INPUT_SIZE = 128
 BATCH_SIZE = 32
 LEARNING_RATE = 1e-3
@@ -55,6 +56,24 @@ def discover_classes(root: Path, max_images_per_class=None):
             samples.append((path, class_name))
 
     return samples, class_to_idx
+
+
+def discover_prepared_classes(prepared_dir: Path):
+    class_images = discover_class_images(prepared_dir / "train")
+    class_to_idx = {
+        name: i for i, name in enumerate(sorted(class_images))
+    }
+    return class_to_idx
+
+
+def load_prepared_split(split_dir: Path, class_to_idx: dict):
+    class_images = discover_class_images(split_dir)
+    samples = []
+    for class_name, images in class_images.items():
+        label = class_to_idx[class_name]
+        for path in images:
+            samples.append((path, label))
+    return samples
 
 
 # also use in predict.py
@@ -237,9 +256,10 @@ def train(
     return best_val_acc
 
 
-def package_outputs(class_to_idx, zip_name="learnings.zip"):
+def package_outputs(class_to_idx, train_dir: Path, zip_name="learnings.zip"):
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     zip_name = OUT_DIR / zip_name
+    base_dir = train_dir.parent.parent
     with zipfile.ZipFile(zip_name, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.write("best_model.pt")
 
@@ -247,17 +267,26 @@ def package_outputs(class_to_idx, zip_name="learnings.zip"):
             json.dump(class_to_idx, f)
         zf.write("class_to_idx.json")
 
-        for path in TRAIN_CACHE.rglob("*.jpg"):
-            zf.write(path, arcname=str(path.relative_to(CACHE_DIR.parent)))
+        for path in train_dir.rglob("*.jpg"):
+            zf.write(path, arcname=str(path.relative_to(base_dir)))
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("directory", type=Path)
+    parser.add_argument(
+        "directory", type=Path, nargs="?", default=None,
+        help="Path to raw inputs. Ignored with --prepared-data"
+    )
+    parser.add_argument(
+        "-p", "--prepared-data", type=Path, default=None,
+        help="Path to an already-pre-prepared dataset. "
+             "Has to be of train-val format (like what this program "
+             "produces if ran without the option)"
+    )
     parser.add_argument(
         "-n", "--max-images-per-class", type=int, default=None,
         help="Cap the number of input images read per class "
-             "(default: none)"
+             "(default: none). Ignored with --prepared-data"
     )
     parser.add_argument(
         "-e", "--epochs", type=int, default=MAX_EPOCHS,
@@ -287,6 +316,15 @@ def main():
     )
     args = parser.parse_args()
 
+    if (args.prepared_data is None and args.directory is None):
+        parser.error(
+            "Either give a directory of raw inputs or pass the "
+            "--prepared-data option"
+        )
+    if (args.prepared_data is not None and args.directory is not None):
+        parser.error(
+            "Raw inputs directory and --prepared-data are mutually exclusive"
+        )
     if (args.device == "cuda" and not torch.cuda.is_available()):
         parser.error("CUDA requested but not available on this machine")
     if (not (0.0 <= args.dropout <= 0.9)):
@@ -304,37 +342,46 @@ def main():
     device = torch.device(args.device)
     use_cuda = device.type == "cuda"
 
-    if (CACHE_DIR.exists()):
-        shutil.rmtree(CACHE_DIR)
+    if (args.prepared_data is not None):
+        train_dir = args.prepared_data / "train"
+        val_dir = args.prepared_data / "val"
+        class_to_idx = discover_prepared_classes(args.prepared_data)
+        print(f"using preprepared data from {args.prepared_data}")
+        train_samples = load_prepared_split(train_dir, class_to_idx)
+        val_samples = load_prepared_split(val_dir, class_to_idx)
+    else:
+        if (CACHE_DIR.exists()):
+            shutil.rmtree(CACHE_DIR)
 
-    raw_samples, class_to_idx = discover_classes(
-        args.directory, max_images_per_class=args.max_images_per_class
-    )
+        raw_samples, class_to_idx = discover_classes(
+            args.directory, max_images_per_class=args.max_images_per_class
+        )
 
-    labels_for_split = [cls for _, cls in raw_samples]
-    train_raw, val_raw = train_test_split(
-        raw_samples,
-        test_size=VAL_SPLIT,
-        stratify=labels_for_split,
-        random_state=42
-    )
+        labels_for_split = [cls for _, cls in raw_samples]
+        train_raw, val_raw = train_test_split(
+            raw_samples,
+            test_size=VAL_SPLIT,
+            stratify=labels_for_split,
+            random_state=42
+        )
 
-    print(f"preparing train split ({len(train_raw)} images)")
-    train_samples = prepare_split(
-        train_raw,
-        class_to_idx,
-        TRAIN_CACHE,
-        needs_augmenting=True,
-        inpsize=args.input_size
-    )
-    print(f"preparing valdation split ({len(val_raw)} images)")
-    val_samples = prepare_split(
-        val_raw,
-        class_to_idx,
-        VAL_CACHE,
-        needs_augmenting=False,
-        inpsize=args.input_size
-    )
+        print(f"preparing training data ({len(train_raw)} images)")
+        train_samples = prepare_split(
+            train_raw,
+            class_to_idx,
+            TRAIN_CACHE,
+            needs_augmenting=True,
+            inpsize=args.input_size
+        )
+        print(f"preparing valdation data ({len(val_raw)} images)")
+        val_samples = prepare_split(
+            val_raw,
+            class_to_idx,
+            VAL_CACHE,
+            needs_augmenting=False,
+            inpsize=args.input_size
+        )
+        train_dir = TRAIN_CACHE
 
     train_loader = DataLoader(
         LeafDataset(train_samples),
@@ -369,7 +416,7 @@ def main():
     )
     print(f"best val_acc: {best_val_acc:.4f}")
 
-    package_outputs(class_to_idx)
+    package_outputs(class_to_idx, train_dir)
 
 
 if (__name__ == "__main__"):
