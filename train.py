@@ -279,7 +279,7 @@ def package_outputs(
             zf.write(path, arcname=str(path.relative_to(base_dir)))
 
 
-def main():
+def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "directory", type=Path, nargs="?", default=None,
@@ -347,6 +347,12 @@ def main():
         parser.error(
             "The learning rate specified is found to be quite invalid"
         )
+
+    return args
+
+
+def main():
+    args = parse_args()
     device = torch.device(args.device)
     use_cuda = device.type == "cuda"
 
