@@ -303,8 +303,8 @@ def main():
     parser.add_argument(
         "-I", "--input-size", type=int, default=INPUT_SIZE,
         help="The size to which the inputs will be scaled, in pixels, "
-             "one side only (since the inputs are squares)."
-             f"\nDefault is {INPUT_SIZE}, ranges 16..512"
+             "one side only (since the inputs are squares). "
+             f"Default is {INPUT_SIZE}, ranges 16..512."
     )
     parser.add_argument(
         "-B", "--batch-size", type=int, default=BATCH_SIZE,
@@ -384,13 +384,13 @@ def main():
         train_dir = TRAIN_CACHE
 
     train_loader = DataLoader(
-        LeafDataset(train_samples),
+        LeafDataset(train_samples, size=args.input_size),
         batch_size=args.batch_size,
         shuffle=True,
         pin_memory=use_cuda
     )
     val_loader = DataLoader(
-        LeafDataset(val_samples),
+        LeafDataset(val_samples, size=args.input_size),
         batch_size=args.batch_size,
         shuffle=False,
         pin_memory=use_cuda
