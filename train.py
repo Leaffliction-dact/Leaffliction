@@ -29,8 +29,8 @@ DROPOUT_P = 0.3
 MAX_EPOCHS = 50
 PATIENCE = 7
 
-# for augs
-MAX_CLASS_SIZE_MULTIPLIER = 3
+# this much of the originals will be preserved (the rest will go through augs)
+AUGMENT_BASE_FRACTION = 0.25
 
 # seemingly better for 'realism' and prediction later.
 AUGMENT_BEFORE_MASK = True
@@ -83,36 +83,73 @@ def mask_and_resize(img: np.ndarray, size=INPUT_SIZE) -> np.ndarray:
     return cv2.resize(masked, (size, size))
 
 
-def augmented_count_needed(class_count: int, max_count: int) -> int:
-    if (class_count >= max_count):
-        return 0
-    target_count = min(max_count, class_count * MAX_CLASS_SIZE_MULTIPLIER)
-    return target_count - class_count
+def augmentation_base(raw_paths: list, target_count: int) -> list:
+    base_size = int(target_count * AUGMENT_BASE_FRACTION)
+    if (len(raw_paths) < base_size):
+        return raw_paths
+    return random.sample(raw_paths, base_size)
+
+
+def _apply_effect_sequence(img: np.ndarray, effect_names: list) -> np.ndarray:
+    for name in effect_names:
+        img = apply_effects([img], [name], 1)[1]
+    return img
 
 
 def _process_and_save(
         raw_path: Path,
         out_dir: Path,
         inpsize: int,
-        effect_name=None,
+        effect_names=None,
         ):
     img = cv2.imread(str(raw_path))
 
-    if (effect_name is None):
+    if (not effect_names):
         img = mask_and_resize(img, inpsize)
     elif (AUGMENT_BEFORE_MASK):
-        img = apply_effects([img], [effect_name], 1)[1]
+        img = _apply_effect_sequence(img, effect_names)
         img = mask_and_resize(img, inpsize)
     else:
         img = mask_and_resize(img, inpsize)
-        img = apply_effects([img], [effect_name], 1)[1]
+        img = _apply_effect_sequence(img, effect_names)
 
-    tag = effect_name
-    if (tag is None):
+    if (effect_names):
+        tag = "_".join(effect_names)
+    else:
         tag = "orig"
     out_path = out_dir / f"{raw_path.stem}_{tag}.jpg"
     cv2.imwrite(str(out_path), img)
     return out_path
+
+
+def _augment_base_image(
+        raw_path: Path,
+        class_dir: Path,
+        effect_names: list,
+        inpsize: int,
+        label: int):
+    augmented = []
+
+    solo_effects = random.sample(effect_names, 2)
+    for name in solo_effects:
+        p = _process_and_save(
+            raw_path,
+            class_dir,
+            effect_names=[name],
+            inpsize=inpsize
+        )
+        augmented.append((p, label))
+
+    seq_effects = random.sample(effect_names, 2)
+    p = _process_and_save(
+        raw_path,
+        class_dir,
+        effect_names=seq_effects,
+        inpsize=inpsize
+    )
+    augmented.append((p, label))
+
+    return augmented
 
 
 def prepare_split(
@@ -147,22 +184,17 @@ def prepare_split(
             print(f"  [{processed:4d}/{total}] {cls}/{raw_path.name}")
 
         if (needs_augmenting):
-            n_needed = augmented_count_needed(len(raw_paths), max_count)
-            combos = [
-                (raw_path, name)
-                for raw_path in raw_paths
-                for name in effect_names
-            ]
-            chosen = random.sample(combos, min(n_needed, len(combos)))
-            for raw_path, name in chosen:
-                p = _process_and_save(
+            base_paths = augmentation_base(raw_paths, max_count)
+            for raw_path in base_paths:
+                augmented = _augment_base_image(
                     raw_path,
                     class_dir,
-                    effect_name=name,
-                    inpsize=inpsize
+                    effect_names,
+                    inpsize,
+                    label
                 )
-                prepared.append((p, label))
-            print(f"    +{len(chosen)} augmented for {cls}")
+                prepared.extend(augmented)
+            print(f"    +{len(base_paths) * 3} augmented for {cls}")
 
     return prepared
 
@@ -363,7 +395,7 @@ def parse_args():
         parser.error(
             "The learning rate specified is found to be quite invalid"
         )
-    if (args.cache_dir.exists()):
+    if (args.cache_dir.exists() and not args.prepared_data):
         parser.error(
             f"Cache dir {args.cache_dir} already exists"
         )
