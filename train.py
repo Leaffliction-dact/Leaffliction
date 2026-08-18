@@ -256,7 +256,11 @@ def train(
     return best_val_acc
 
 
-def package_outputs(class_to_idx, train_dir: Path, zip_name="learnings.zip"):
+def package_outputs(
+        class_to_idx,
+        train_dir: Path,
+        input_size: int,
+        zip_name="learnings.zip"):
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     zip_name = OUT_DIR / zip_name
     base_dir = train_dir.parent.parent
@@ -266,6 +270,10 @@ def package_outputs(class_to_idx, train_dir: Path, zip_name="learnings.zip"):
         with open("class_to_idx.json", "w") as f:
             json.dump(class_to_idx, f)
         zf.write("class_to_idx.json")
+
+        with open("img_dim", "w") as f:
+            f.write(str(input_size))
+        zf.write("img_dim")
 
         for path in train_dir.rglob("*.jpg"):
             zf.write(path, arcname=str(path.relative_to(base_dir)))
@@ -416,7 +424,7 @@ def main():
     )
     print(f"best val_acc: {best_val_acc:.4f}")
 
-    package_outputs(class_to_idx, train_dir)
+    package_outputs(class_to_idx, train_dir, args.input_size)
 
 
 if (__name__ == "__main__"):
