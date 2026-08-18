@@ -2,7 +2,7 @@
 
 ### Installation
 0. Have `uv` installed.
-1. For school, `export UV_PROJECT_ENVIRONMENT=~/sgoinfre/venvs/leaffliction`
+1. For school, `export UV_PROJECT_ENVIRONMENT=~/goinfre/venvs/leaffliction`
 2. What's your device? CUDA => `uv sync --extra=cuda`; NOT CUDA => `uv sync --extra=cpu`
 
 ### Running

@@ -1,7 +1,6 @@
 import argparse
 import json
 import random
-import shutil
 import zipfile
 from pathlib import Path
 
@@ -36,10 +35,9 @@ MAX_CLASS_SIZE_MULTIPLIER = 3
 # seemingly better for 'realism' and prediction later.
 AUGMENT_BEFORE_MASK = True
 
-CACHE_DIR = Path("~/sgoinfre/_prepared_data").expanduser()
-TRAIN_CACHE = CACHE_DIR / "train"
-VAL_CACHE = CACHE_DIR / "val"
-OUT_DIR = Path("~/sgoinfre/leafzip").expanduser()
+DEFAULT_CACHE_DIR = Path("~/goinfre/_prepared_data").expanduser()
+DEFAULT_MODEL_PATH = Path("best_model.pt")
+DEFAULT_ZIP_PATH = Path("~/goinfre/leafzip/learnings.zip").expanduser()
 
 
 def discover_classes(root: Path, max_images_per_class=None):
@@ -208,10 +206,12 @@ def train(
         optimizer,
         device,
         max_epochs,
-        patience):
+        patience,
+        model_path: Path):
     best_val_acc = 0.0
     best_val_loss = float("inf")
     epochs_without_improvement = 0
+    model_path.parent.mkdir(parents=True, exist_ok=True)
 
     try:
         for epoch in range(max_epochs):
@@ -238,7 +238,7 @@ def train(
 
             if (val_acc > best_val_acc):
                 best_val_acc = val_acc
-                torch.save(model.state_dict(), "best_model.pt")
+                torch.save(model.state_dict(), model_path)
 
             if (val_loss < best_val_loss):
                 best_val_loss = val_loss
@@ -260,12 +260,12 @@ def package_outputs(
         class_to_idx,
         train_dir: Path,
         input_size: int,
-        zip_name="learnings.zip"):
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
-    zip_name = OUT_DIR / zip_name
+        model_path: Path,
+        zip_path: Path):
+    zip_path.parent.mkdir(parents=True, exist_ok=True)
     base_dir = train_dir.parent.parent
-    with zipfile.ZipFile(zip_name, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.write("best_model.pt")
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.write(model_path, arcname=model_path.name)
 
         with open("class_to_idx.json", "w") as f:
             json.dump(class_to_idx, f)
@@ -322,6 +322,22 @@ def parse_args():
         "-L", "--learning-rate", type=float, default=LEARNING_RATE,
         help=f"Learning rate (0.0 to 1.0, default {LEARNING_RATE})"
     )
+    parser.add_argument(
+        "-c", "--cache-dir", type=Path, default=DEFAULT_CACHE_DIR,
+        help="Where to cache the preprocessed images "
+             f"(default: {DEFAULT_CACHE_DIR}). "
+             "Ignored with --prepared-data"
+    )
+    parser.add_argument(
+        "-m", "--model-output", type=Path, default=DEFAULT_MODEL_PATH,
+        help="Path for writing the best model at the end of the session "
+             f"(default: {DEFAULT_MODEL_PATH})"
+    )
+    parser.add_argument(
+        "-z", "--zip-output", type=Path, default=DEFAULT_ZIP_PATH,
+        help="Path for writing the zip asked for in the subject pdf "
+             f"(default: {DEFAULT_ZIP_PATH})"
+    )
     args = parser.parse_args()
 
     if (args.prepared_data is None and args.directory is None):
@@ -347,6 +363,10 @@ def parse_args():
         parser.error(
             "The learning rate specified is found to be quite invalid"
         )
+    if (args.cache_dir.exists()):
+        parser.error(
+            f"Cache dir {args.cache_dir} already exists"
+        )
 
     return args
 
@@ -364,8 +384,8 @@ def main():
         train_samples = load_prepared_split(train_dir, class_to_idx)
         val_samples = load_prepared_split(val_dir, class_to_idx)
     else:
-        if (CACHE_DIR.exists()):
-            shutil.rmtree(CACHE_DIR)
+        train_cache = args.cache_dir / "train"
+        val_cache = args.cache_dir / "val"
 
         raw_samples, class_to_idx = discover_classes(
             args.directory, max_images_per_class=args.max_images_per_class
@@ -383,7 +403,7 @@ def main():
         train_samples = prepare_split(
             train_raw,
             class_to_idx,
-            TRAIN_CACHE,
+            train_cache,
             needs_augmenting=True,
             inpsize=args.input_size
         )
@@ -391,11 +411,11 @@ def main():
         val_samples = prepare_split(
             val_raw,
             class_to_idx,
-            VAL_CACHE,
+            val_cache,
             needs_augmenting=False,
             inpsize=args.input_size
         )
-        train_dir = TRAIN_CACHE
+        train_dir = train_cache
 
     train_loader = DataLoader(
         LeafDataset(train_samples, size=args.input_size),
@@ -427,10 +447,17 @@ def main():
         device,
         args.epochs,
         PATIENCE,
+        args.model_output,
     )
     print(f"best val_acc: {best_val_acc:.4f}")
 
-    package_outputs(class_to_idx, train_dir, args.input_size)
+    package_outputs(
+        class_to_idx,
+        train_dir,
+        args.input_size,
+        args.model_output,
+        args.zip_output,
+    )
 
 
 if (__name__ == "__main__"):
