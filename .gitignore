@@ -229,3 +229,7 @@ images/
 
 
 tags
+
+best_model.pt
+class_to_idx.json
+img_dim
