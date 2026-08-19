@@ -38,6 +38,8 @@ AUGMENT_BEFORE_MASK = True
 DEFAULT_CACHE_DIR = Path("~/goinfre/_prepared_data").expanduser()
 DEFAULT_MODEL_PATH = Path("best_model.pt")
 DEFAULT_ZIP_PATH = Path("~/goinfre/leafzip/learnings.zip").expanduser()
+DEFAULT_CLASS_MAP_PATH = Path("class_to_idx.json")
+DEFAULT_IMG_DIM_PATH = Path("img_dim")
 
 
 def discover_classes(root: Path, max_images_per_class=None):
@@ -293,19 +295,23 @@ def package_outputs(
         train_dir: Path,
         input_size: int,
         model_path: Path,
-        zip_path: Path):
+        zip_path: Path,
+        class_map_path: Path,
+        img_dim_path: Path):
     zip_path.parent.mkdir(parents=True, exist_ok=True)
+    class_map_path.parent.mkdir(parents=True, exist_ok=True)
+    img_dim_path.parent.mkdir(parents=True, exist_ok=True)
     base_dir = train_dir.parent.parent
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.write(model_path, arcname=model_path.name)
 
-        with open("class_to_idx.json", "w") as f:
+        with open(class_map_path, "w") as f:
             json.dump(class_to_idx, f)
-        zf.write("class_to_idx.json")
+        zf.write(class_map_path, arcname=class_map_path.name)
 
-        with open("img_dim", "w") as f:
+        with open(img_dim_path, "w") as f:
             f.write(str(input_size))
-        zf.write("img_dim")
+        zf.write(img_dim_path, arcname=img_dim_path.name)
 
         for path in train_dir.rglob("*.jpg"):
             zf.write(path, arcname=str(path.relative_to(base_dir)))
@@ -370,6 +376,17 @@ def parse_args():
         help="Path for writing the zip asked for in the subject pdf "
              f"(default: {DEFAULT_ZIP_PATH})"
     )
+    parser.add_argument(
+        "-j", "--class-map-output", type=Path,
+        default=DEFAULT_CLASS_MAP_PATH,
+        help="Path for writing the class-to-index mapping "
+             f"(default: {DEFAULT_CLASS_MAP_PATH})"
+    )
+    parser.add_argument(
+        "-i", "--img-dim-output", type=Path, default=DEFAULT_IMG_DIM_PATH,
+        help="Path for writing the recorded input image size "
+             f"(default: {DEFAULT_IMG_DIM_PATH})"
+    )
     args = parser.parse_args()
 
     if (args.prepared_data is None and args.directory is None):
@@ -404,24 +421,31 @@ def parse_args():
 
 
 def main():
+    print("Welcome to the training program")
     args = parse_args()
+    print("[ OK ] args parse")
     device = torch.device(args.device)
     use_cuda = device.type == "cuda"
 
     if (args.prepared_data is not None):
+        print(f"[INFO] prepared data: {args.prepared_data}")
         train_dir = args.prepared_data / "train"
         val_dir = args.prepared_data / "val"
         class_to_idx = discover_prepared_classes(args.prepared_data)
-        print(f"using preprepared data from {args.prepared_data}")
+        print("[ OK ] classes discovered")
         train_samples = load_prepared_split(train_dir, class_to_idx)
+        print("[ OK ] train split loaded")
         val_samples = load_prepared_split(val_dir, class_to_idx)
+        print("[ OK ] val split loaded")
     else:
+        print(f"[INFO] starting without pre-prepared data")
         train_cache = args.cache_dir / "train"
         val_cache = args.cache_dir / "val"
 
         raw_samples, class_to_idx = discover_classes(
             args.directory, max_images_per_class=args.max_images_per_class
         )
+        print("[ OK ] classes discovered")
 
         labels_for_split = [cls for _, cls in raw_samples]
         train_raw, val_raw = train_test_split(
@@ -430,8 +454,9 @@ def main():
             stratify=labels_for_split,
             random_state=42
         )
+        print("[ OK ] split of raw succeeded")
 
-        print(f"preparing training data ({len(train_raw)} images)")
+        print(f"[INFO] preparing training data ({len(train_raw)} images)")
         train_samples = prepare_split(
             train_raw,
             class_to_idx,
@@ -439,7 +464,8 @@ def main():
             needs_augmenting=True,
             inpsize=args.input_size
         )
-        print(f"preparing valdation data ({len(val_raw)} images)")
+        print("[ OK ] training data split prepared")
+        print(f"[INFO] preparing valdation data ({len(val_raw)} images)")
         val_samples = prepare_split(
             val_raw,
             class_to_idx,
@@ -447,6 +473,7 @@ def main():
             needs_augmenting=False,
             inpsize=args.input_size
         )
+        print("[ OK ] validation data split prepared")
         train_dir = train_cache
 
     train_loader = DataLoader(
@@ -455,21 +482,28 @@ def main():
         shuffle=True,
         pin_memory=use_cuda
     )
+    print("[ OK ] training data loader created")
     val_loader = DataLoader(
         LeafDataset(val_samples, size=args.input_size),
         batch_size=args.batch_size,
         shuffle=False,
         pin_memory=use_cuda
     )
+    print("[ OK ] validation data loader created")
 
     model = LeafCNN(
         num_classes=len(class_to_idx),
         d_o_p=args.dropout
     ).to(device)
+    print("[ OK ] LeafCNN created")
     class_weights = build_class_weights(train_samples, class_to_idx, device)
+    print("[ OK ] class weights built")
     criterion = nn.CrossEntropyLoss(weight=class_weights)
+    print("[ OK ] criterion built")
     optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
+    print("[ OK ] optimizer built")
 
+    print("[INFO] starting the training\n\n")
     best_val_acc = train(
         train_loader,
         val_loader,
@@ -489,6 +523,8 @@ def main():
         args.input_size,
         args.model_output,
         args.zip_output,
+        args.class_map_output,
+        args.img_dim_output,
     )
 
 

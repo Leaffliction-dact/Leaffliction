@@ -227,9 +227,13 @@ augmented_directory/
 
 images/
 
-
+# tags for vim
 tags
 
-best_model.pt
-class_to_idx.json
+#models/results
+*.pt
+*.json
 img_dim
+*.zip
+cti*
+id*
