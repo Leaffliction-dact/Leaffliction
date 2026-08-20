@@ -15,7 +15,7 @@ from utils.image_transformations import (
 )
 
 
-def parse_args():
+def _parse_args():
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers()
     subparsers.required = True
@@ -48,7 +48,7 @@ def parse_args():
     return args
 
 
-def transform_image(img_filename):
+def _transform_image(img_filename):
     original, _, _ = pcv.readimage(filename=img_filename)
     gaussian_blur = transform_gaussian_blur(original)
     chanel = transform_chanel(gaussian_blur)
@@ -68,11 +68,11 @@ def transform_image(img_filename):
             normal_img)
 
 
-def subcommand_show(args):
-    transformed_images = transform_image(args.img)
+def _subcommand_show(args):
+    transformed_images = _transform_image(args.img)
     # build the figure.
-    fig = plt.figure(layout="constrained")
-    gs = GridSpec(4, 6, figure=fig)
+    fig = plt.figure(layout="constrained", figsize=(20, 10))
+    gs = GridSpec(4, 8, figure=fig, )
     ax1 = fig.add_subplot(gs[0, 0])
     ax2 = fig.add_subplot(gs[0, 1])
     ax3 = fig.add_subplot(gs[1, 0])
@@ -81,7 +81,8 @@ def subcommand_show(args):
     ax6 = fig.add_subplot(gs[2, 1])
     ax7 = fig.add_subplot(gs[3, 0])
     ax8 = fig.add_subplot(gs[3, 1])
-    ax9 = fig.add_subplot(gs[:, 2:])
+    ax9 = fig.add_subplot(gs[:, 2:-1])
+    ax10 = fig.add_subplot(gs[:, -1])
     ax1.set_title("Original")
     ax2.set_title("Gausian blur")
     ax3.set_title("Chanel")
@@ -100,19 +101,45 @@ def subcommand_show(args):
     ax6.imshow(cv.cvtColor(transformed_images[5], cv.COLOR_BGR2RGB))
     ax7.imshow(cv.cvtColor(transformed_images[6], cv.COLOR_BGR2RGB))
     ax8.imshow(cv.cvtColor(transformed_images[7], cv.COLOR_BGR2RGB))
+    # plot the histogram
+    bgr_img = transformed_images[0]
+    hsv_img = cv.cvtColor(bgr_img, cv.COLOR_BGR2HSV)
+    lab_img = cv.cvtColor(bgr_img, cv.COLOR_BGR2LAB)
+    ax9.hist(bgr_img[:, :, 0].flatten(), 256, (0, 255), histtype='step',
+             label="blue")
+    ax9.hist(bgr_img[:, :, 1].flatten(), 256, (0, 255), histtype='step',
+             label="green")
+    ax9.hist(bgr_img[:, :, 2].flatten(), 256, (0, 255), histtype='step',
+             label="red")
+    ax9.hist(hsv_img[:, :, 0].flatten(), 256, (0, 255), histtype='step',
+             label="hue")
+    ax9.hist(hsv_img[:, :, 1].flatten(), 256, (0, 255), histtype='step',
+             label="saturation")
+    ax9.hist(hsv_img[:, :, 2].flatten(), 256, (0, 255), histtype='step',
+             label="value")
+    ax9.hist(lab_img[:, :, 0].flatten(), 256, (0, 255), histtype='step',
+             label="lightness")
+    ax9.hist(lab_img[:, :, 1].flatten(), 256, (0, 255), histtype='step',
+             label="Chrominance-Red")
+    ax9.hist(lab_img[:, :, 2].flatten(), 256, (0, 255), histtype='step',
+             label="Chrominance-Blue")
+    handles, labels = ax9.get_legend_handles_labels()
+    ax10.legend(handles, labels, borderaxespad=0, loc=10)
+    ax10.axis("off")
 
+    plt.tight_layout()
     plt.show()
 
 
-def subcommand_transform(args):
+def _subcommand_transform(args):
     print("DEBUG:\t", "transform subcommand isn't implemented.")
     # pcv.print_image(transformed_images, filename="./taha_test2.jpg")
 
 
 if __name__ == '__main__':
-    args = parse_args()
+    args = _parse_args()
     print("DEBUG:\t", args)
     if hasattr(args, 'img'):
-        subcommand_show(args)
+        _subcommand_show(args)
     else:
-        subcommand_transform(args)
+        _subcommand_transform(args)
