@@ -18,9 +18,24 @@ def predict(model, tensor, device):
         return res_idx, res_probs[res_idx].item()
 
 
+MAX_DISPLAY_DIM = 512
+
+
+def resize_for_display(img, max_dim=MAX_DISPLAY_DIM):
+    h, w = img.shape[:2]
+    longest_side = max(h, w)
+    if (longest_side <= max_dim):
+        return img
+    else:
+        scale = max_dim / longest_side
+        new_size = (int(w * scale), int(h * scale))
+        return cv2.resize(img, new_size, interpolation=cv2.INTER_AREA)
+
+
 def draw(raw, maskd, classname, conf):
+    display_raw = resize_for_display(raw)
     fig, axes = plt.subplots(1, 2)
-    rgb_raw = cv2.cvtColor(raw, cv2.COLOR_BGR2RGB)
+    rgb_raw = cv2.cvtColor(display_raw, cv2.COLOR_BGR2RGB)
     rgb_maskd = cv2.cvtColor(maskd, cv2.COLOR_BGR2RGB)
 
     axes[0].imshow(rgb_raw)
@@ -59,27 +74,38 @@ def parse_args():
     return args
 
 def main():
+    print("Welcome to predict")
     args = parse_args()
     device = torch.device(args.device)
 
     cti = json.loads(args.class_map_input.read_text())
+    print("[ OK ] Json loaded")
     idx_to_class = {v: k for k, v in cti.items()}
 
     model = LeafCNN(num_classes=len(idx_to_class), d_o_p=0)
+    print("[ OK ] LeafCNN constructed")
     sdict = torch.load(args.model_input, map_location=args.device)
+    print("[ OK ] state dict loaded")
     model.load_state_dict(sdict)
+    print("[ OK ] state dict loaded into the model")
     model.to(device)
+    print(f"[ OK ] model sent to {args.device}")
     model.eval()
+    print("[ OK ] eval enabled")
 
     raw_input = cv2.imread(args.input_img)
+    print("[ OK ] raw img read")
     masked_resized = mask_and_resize(
         raw_input,
         int(args.img_dim_input.read_text())
     )
+    print("[ OK ] img masked & resized")
     float_img = masked_resized.astype(np.float32) / 255.0
     tensor = torch.from_numpy(float_img).permute(2, 0, 1)
+    print("[ OK ] tensor formed")
 
     predicted_idx, confidence = predict(model, tensor, device)
+    print("[ OK ] prediction done")
 
     classname = idx_to_class[predicted_idx]
     print(f"{confidence:.1%} {classname}")

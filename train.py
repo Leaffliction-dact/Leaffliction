@@ -1,6 +1,7 @@
 import argparse
 import json
 import random
+import warnings
 import zipfile
 from pathlib import Path
 
@@ -18,6 +19,12 @@ from utils.effects import EffectName
 from leafcnn import LeafCNN
 from leafset import LeafDataset
 
+pcv.params.verbose = False
+warnings.filterwarnings(
+    "ignore",
+    category=FutureWarning,
+    module=r"plantcv\.plantcv\.(fill|closing)")
+
 # start small for iteration speed try 224/256 later
 # btw, 64 apparently works great
 INPUT_SIZE = 128
@@ -34,6 +41,10 @@ AUGMENT_BASE_FRACTION = 0.25
 
 # seemingly better for 'realism' and prediction later.
 AUGMENT_BEFORE_MASK = True
+
+MASK_REFERENCE_DIM = 256
+MASK_FILL_MIN_AREA = 200
+MASK_CLOSE_KERNEL_SIZE = 15
 
 DEFAULT_CACHE_DIR = Path("~/goinfre/_prepared_data").expanduser()
 DEFAULT_MODEL_PATH = Path("best_model.pt")
@@ -77,10 +88,31 @@ def load_prepared_split(split_dir: Path, class_to_idx: dict):
 
 
 # also use in predict.py
+# don't forget to get the masking from t's version
 def mask_and_resize(img: np.ndarray, size=INPUT_SIZE) -> np.ndarray:
-    saturation = pcv.rgb2gray_hsv(rgb_img=img, channel="s")
-    mask = pcv.threshold.otsu(gray_img=saturation, object_type="light")
-    mask = pcv.fill(bin_img=mask, size=200)
+    h, w = img.shape[:2]
+    area_scale = (h * w) / (MASK_REFERENCE_DIM ** 2)
+    linear_scale = area_scale ** 0.5
+
+    a_channel = pcv.rgb2gray_lab(rgb_img=img, channel="a")
+    green_mask = pcv.threshold.otsu(gray_img=a_channel, object_type="dark")
+
+    b_channel = pcv.rgb2gray_lab(rgb_img=img, channel="b")
+    yellow_mask = pcv.threshold.otsu(gray_img=b_channel, object_type="light")
+
+    mask = pcv.logical_or(bin_img1=green_mask, bin_img2=yellow_mask)
+    fill_min_area = int(MASK_FILL_MIN_AREA * area_scale)
+    mask = pcv.fill(bin_img=mask, size=fill_min_area)
+
+    close_size = int(MASK_CLOSE_KERNEL_SIZE * linear_scale)
+    if (close_size % 2 == 0):
+        close_size += 1
+    close_size = max(close_size, 3)
+    close_kernel = cv2.getStructuringElement(
+        cv2.MORPH_ELLIPSE, (close_size, close_size))
+    mask = pcv.closing(gray_img=mask, kernel=close_kernel)
+    mask = pcv.fill_holes(bin_img=mask)
+
     masked = pcv.apply_mask(img=img, mask=mask, mask_color="white")
     return cv2.resize(masked, (size, size))
 
