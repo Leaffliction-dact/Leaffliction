@@ -114,7 +114,7 @@ def apply_effects(image_list, effects, n_rows):
             case EffectName.SKEW.name:
                 image_list = effect_skew(image_list, n_rows, 0.6)
             case EffectName.ROTATION.name:
-                image_list = effect_rotation(image_list, n_rows, 0.6)
+                image_list = effect_rotation(image_list, n_rows, 1.6)
             case EffectName.BLUR.name:
                 image_list = effect_blur(image_list, n_rows, 7.5)
             case EffectName.CONTRAST.name:
