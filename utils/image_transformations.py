@@ -35,8 +35,12 @@ def transform_mask(img):
 
 def transform_roi_boundaries(mask):
     _, _, stats, _ = cv.connectedComponentsWithStats(mask, 8, cv.CV_32S)
-    stats = stats[1, :-1]
-    return stats
+    best = stats[1]
+    for stat in stats[1:]:
+        if stat[-1] > best[-1]:
+            best = stat
+    best = best[:-1]
+    return best
 
 
 def transform_roi_object(img, stats):
