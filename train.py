@@ -129,49 +129,33 @@ def mask_and_resize(img: np.ndarray, size=INPUT_SIZE) -> np.ndarray:
             (int(w * downscale), int(h * downscale)),
             interpolation=cv2.INTER_AREA)
         h, w = img.shape[:2]
-    print("h w:", h, w)
     area_scale = (h * w) / (MASK_REFERENCE_DIM ** 2)
-    print("area scale:", area_scale)
     linear_scale = area_scale ** 0.5
-    print("and the linear:", linear_scale)
 
     a_channel = pcv.rgb2gray_lab(rgb_img=img, channel="a")
-    print("[ OK ] a received")
     green_mask = pcv.threshold.otsu(gray_img=a_channel, object_type="dark")
-    print("[ OK ] green mask done")
 
     b_channel = pcv.rgb2gray_lab(rgb_img=img, channel="b")
-    print("[ OK ] b received")
     yellow_mask = pcv.threshold.otsu(gray_img=b_channel, object_type="light")
-    print("[ OK ] yellow mask done")
 
     mask = pcv.logical_or(bin_img1=green_mask, bin_img2=yellow_mask)
-    print("[ OK ] or mask calculated")
     fill_min_area = int(MASK_FILL_MIN_AREA * area_scale)
-    print("[ OK ] min area fill calculated")
     mask = pcv.fill(bin_img=mask, size=fill_min_area)
-    print("[ OK ] pcv fill success")
 
     close_size = int(MASK_CLOSE_KERNEL_SIZE * linear_scale)
     if (close_size % 2 == 0):
         close_size += 1
     close_size = max(close_size, 3)
-    print("[ OK ] size of close kernel calculated")
     close_kernel = cv2.getStructuringElement(
         cv2.MORPH_ELLIPSE,
         (close_size, close_size)
     )
-    print("[ OK ] close kernel created")
     mask = pcv.closing(gray_img=mask, kernel=close_kernel)
-    print("[ OK ] pcv closing done")
     mask = pcv.fill_holes(bin_img=mask)
-    print("[ OK ] pcv fill holes done")
 
     img, mask = _crop_to_largest_component(img, mask)
-    print("[ OK ] cropped to largest connected component")
 
     masked = pcv.apply_mask(img=img, mask=mask, mask_color="white")
-    print("[ OK ] pcv mask applied")
     return cv2.resize(masked, (size, size))
 
 
