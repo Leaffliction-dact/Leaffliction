@@ -14,8 +14,10 @@ def predict(model, tensor, device):
     with torch.no_grad():
         logits = model(tensor.unsqueeze(0).to(device))
         res_probs = torch.softmax(logits, dim=1).squeeze(0)
+        print("res_probs...")
+        res_list = res_probs.tolist()
         res_idx = res_probs.argmax().item()
-        return res_idx, res_probs[res_idx].item()
+        return res_idx, res_probs[res_idx].item(), res_list
 
 
 MAX_DISPLAY_DIM = 512
@@ -43,7 +45,10 @@ def draw(raw, maskd, classname, conf):
     axes[1].imshow(rgb_maskd)
     axes[1].axis('off')
 
-    fig.suptitle(f"I think it's {classname} with {conf:.1%} confidence")
+    fig.suptitle(
+        f"I think it's {classname} with {conf:.1%} confidence",
+        fontsize=48,
+    )
     plt.show()
 
 
@@ -72,6 +77,7 @@ def parse_args():
     args = parser.parse_args()
 
     return args
+
 
 def main():
     print("Welcome to predict")
@@ -104,14 +110,16 @@ def main():
     tensor = torch.from_numpy(float_img).permute(2, 0, 1)
     print("[ OK ] tensor formed")
 
-    predicted_idx, confidence = predict(model, tensor, device)
+    predicted_idx, confidence, res_list = predict(model, tensor, device)
     print("[ OK ] prediction done")
 
     classname = idx_to_class[predicted_idx]
     print(f"{confidence:.1%} {classname}")
-    print(f"(the input file's folder was called {args.input_img.parent})")
+    print("While the others:")
+    for classname_gen, prob in zip(idx_to_class.values(), res_list):
+        print(f"{classname_gen:30s}: {prob:13.8%}")
     draw(raw_input, masked_resized, classname, confidence)
 
 
-if (__name__=="__main__"):
+if (__name__ == "__main__"):
     main()
