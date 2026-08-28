@@ -1,6 +1,7 @@
 import cv2 as cv
 import sys
 import argparse
+from pathlib import Path
 from plantcv import plantcv as pcv
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
@@ -134,13 +135,37 @@ def _subcommand_show(args):
     plt.show()
 
 
-def _get_all_files_paths(path):
+def _get_all_filepaths(path):
+    if path.exists() == False:
+        print("--src path doesn't exist.")
+        os.exit(1)
+    if path.is_file():
+        return [str(path)]
+    paths = []
+    subdirs = [path]
+    while len(subdirs) != 0:
+        paths = paths + [x for x in subdirs[0].iterdir() if x.is_file() and x.name[0] != '.']
+        if subdirs[0].is_dir():
+            subdirs = subdirs[1:] + [x for x in subdirs[0].iterdir() if x.is_dir() and x.name[0] != '.']
+        else:
+            subdirs = subdirs[1:]
+    return paths
+
     
 
 
 def _subcommand_transform(args):
     print("DEBUG:\t", "transform subcommand isn't implemented.")
     print("DEBUG:\t", args)
+    paths = _get_all_filepaths(Path(args.src))
+    for path in paths:
+        original = cv.imread(str(path), cv.IMREAD_COLOR)
+        if original == None:
+            continue
+        transformed_images = _transform_image(original)
+        
+        print(str(path))
+
     # pcv.print_image(transformed_images, filename="./taha_test2.jpg")
 
 
