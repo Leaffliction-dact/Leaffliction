@@ -6,7 +6,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 import torch
 
-from train import mask_and_resize
+from utils.train_and_image_outs_and_proc import mask_and_resize
 from leafcnn import LeafCNN
 
 
