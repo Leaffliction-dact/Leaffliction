@@ -23,9 +23,7 @@ MASKING_MAX_DIM = 512
 MASK_REFERENCE_DIM = 256
 MASK_FILL_MIN_AREA = 200
 MASK_CLOSE_KERNEL_SIZE = 15
-
-# this much of the originals will be preserved (the rest will go through augs)
-AUGMENT_BASE_FRACTION = 0.25
+AUGS_TO_MAKE = 3
 
 
 def _crop_to_largest_component(
@@ -134,33 +132,20 @@ def _augment_base_image(
         label: int):
     augmented = []
 
-    solo_effects = random.sample(effect_names, 2)
-    for name in solo_effects:
+    print("writing... ", end="")
+    for i in range(AUGS_TO_MAKE):
+        seq_effects = random.sample(effect_names, 2)
         p = _prepare_and_write_imgs(
             raw_path,
             class_dir,
-            effect_names=[name],
+            effect_names=seq_effects,
             inpsize=inpsize
         )
         augmented.append((p, label))
-
-    seq_effects = random.sample(effect_names, 2)
-    p = _prepare_and_write_imgs(
-        raw_path,
-        class_dir,
-        effect_names=seq_effects,
-        inpsize=inpsize
-    )
-    augmented.append((p, label))
+        print(f"{i:2d}", end="")
+    print()
 
     return augmented
-
-
-def _select_base_imgs_for_augs(raw_paths: list, target_count: int) -> list:
-    base_size = int(target_count * AUGMENT_BASE_FRACTION)
-    if (len(raw_paths) < base_size):
-        return raw_paths
-    return random.sample(raw_paths, base_size)
 
 
 # prepares one of the splits, those being training or validation sets
@@ -177,9 +162,6 @@ def prepare_split(
     for raw_path, cls in samples:
         class_paths.setdefault(cls, []).append(raw_path)
 
-    if (needs_augmenting):
-        max_count = max(len(paths) for paths in class_paths.values())
-
     effect_names = [effect.name for effect in EffectName]
 
     total = len(samples)
@@ -193,20 +175,27 @@ def prepare_split(
             p = _prepare_and_write_imgs(raw_path, class_dir, inpsize=inpsize)
             prepared.append((p, label))
             processed += 1
-            print(f"  [{processed:4d}/{total}] {cls}/{raw_path.name}")
+            print(f"  [{processed:5d}/{total}] {cls}/{raw_path.name}")
 
         if (needs_augmenting):
-            base_paths = _select_base_imgs_for_augs(raw_paths, max_count)
-            for base_path in base_paths:
+            processed_augs = 0
+            total_augs = AUGS_TO_MAKE * len(raw_paths)
+            print("             And the augs...")
+            for raw_path in raw_paths:
                 augmented = _augment_base_image(
-                    base_path,
+                    raw_path,
                     class_dir,
                     effect_names,
                     inpsize,
                     label
                 )
                 prepared.extend(augmented)
-            print(f"    +{len(base_paths) * 3} augmented for {cls}")
+                processed_augs += AUGS_TO_MAKE
+                print(
+                    f"      [{processed_augs:5d}/{total_augs}]"
+                    f" {cls}/{raw_path.name}"
+                )
+            print(f"    +{len(raw_paths) * AUGS_TO_MAKE} augmented for {cls}")
 
     return prepared
 
