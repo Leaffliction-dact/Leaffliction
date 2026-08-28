@@ -113,15 +113,15 @@ def apply_effects(image_list, effects, n_rows):
             case EffectName.CROP.name:
                 image_list = effect_crop(image_list, n_rows, 1.6)
             case EffectName.SKEW.name:
-                image_list = effect_skew(image_list, n_rows, 0.6)
+                image_list = effect_skew(image_list, n_rows, 0.7)
             case EffectName.ROTATION.name:
                 image_list = effect_rotation(image_list, n_rows, 2*pi)
             case EffectName.BLUR.name:
                 image_list = effect_blur(image_list, n_rows, 7.5)
             case EffectName.CONTRAST.name:
-                image_list = effect_contrast(image_list, n_rows, 1.5)
+                image_list = effect_contrast(image_list, n_rows, 1.6)
             case EffectName.BRIGHTNESS.name:
-                image_list = effect_brightness(image_list, n_rows, 0.2)
+                image_list = effect_brightness(image_list, n_rows, 0.3)
             case _:
                 pass
     return image_list

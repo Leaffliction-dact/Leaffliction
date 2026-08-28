@@ -107,6 +107,7 @@ def _prepare_and_write_imgs(
         out_dir: Path,
         inpsize: int,
         effect_names=None,
+        i=None,
         ):
     img = cv2.imread(str(raw_path))
 
@@ -118,7 +119,10 @@ def _prepare_and_write_imgs(
         tag = "_".join(effect_names)
     else:
         tag = "orig"
-    out_path = out_dir / f"{raw_path.stem}_{tag}.jpg"
+    if (i is not None):
+        out_path = out_dir / f"{raw_path.stem}_{tag}_{i}.jpg"
+    else:
+        out_path = out_dir / f"{raw_path.stem}_{tag}.jpg"
     cv2.imwrite(str(out_path), img)
     return out_path
 
@@ -134,12 +138,14 @@ def _augment_base_image(
 
     print("writing... ", end="")
     for i in range(AUGS_TO_MAKE):
-        seq_effects = random.sample(effect_names, 2)
+        seq_effects = ["ROTATION"]
+        seq_effects.extend(random.sample(effect_names, 2))
         p = _prepare_and_write_imgs(
             raw_path,
             class_dir,
             effect_names=seq_effects,
-            inpsize=inpsize
+            inpsize=inpsize,
+            i=i
         )
         augmented.append((p, label))
         print(f"{i:2d}", end="")
