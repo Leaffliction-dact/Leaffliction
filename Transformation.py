@@ -1,4 +1,5 @@
 import cv2 as cv
+import sys
 import argparse
 from plantcv import plantcv as pcv
 import matplotlib.pyplot as plt
@@ -48,8 +49,7 @@ def _parse_args():
     return args
 
 
-def _transform_image(img_filename):
-    original, _, _ = pcv.readimage(filename=img_filename)
+def _transform_image(original):
     gaussian_blur = transform_gaussian_blur(original)
     chanel = transform_chanel(gaussian_blur)
     mask = transform_mask(chanel)
@@ -58,8 +58,7 @@ def _transform_image(img_filename):
     analyze_object = transform_analyze_object(original, mask)
     pseudolandmarks = transform_pseudolandmarks(original, mask)
     normal_img = transform_normalize(original, mask, img_stats)
-    return (original,
-            gaussian_blur,
+    return (gaussian_blur,
             chanel,
             mask,
             roi_object,
@@ -69,7 +68,11 @@ def _transform_image(img_filename):
 
 
 def _subcommand_show(args):
-    transformed_images = _transform_image(args.img)
+    original = cv.imread(args.img, cv.IMREAD_COLOR)
+    if original == None:
+        print("unable to open file as image. check that the filename is correct.")
+        sys.exit(1)
+    transformed_images = _transform_image(original)
     # build the figure.
     fig = plt.figure(layout="constrained", figsize=(20, 10))
     gs = GridSpec(4, 8, figure=fig, )
@@ -93,14 +96,14 @@ def _subcommand_show(args):
     ax8.set_title("normalize")
     ax9.set_title("Color histogram")
     # plot all images.
-    ax1.imshow(cv.cvtColor(transformed_images[0], cv.COLOR_BGR2RGB))
-    ax2.imshow(cv.cvtColor(transformed_images[1], cv.COLOR_BGR2RGB))
-    ax3.imshow(cv.cvtColor(transformed_images[2], cv.COLOR_BGR2RGB))
-    ax4.imshow(cv.cvtColor(transformed_images[3], cv.COLOR_BGR2RGB))
-    ax5.imshow(cv.cvtColor(transformed_images[4], cv.COLOR_BGR2RGB))
-    ax6.imshow(cv.cvtColor(transformed_images[5], cv.COLOR_BGR2RGB))
-    ax7.imshow(cv.cvtColor(transformed_images[6], cv.COLOR_BGR2RGB))
-    ax8.imshow(cv.cvtColor(transformed_images[7], cv.COLOR_BGR2RGB))
+    ax1.imshow(cv.cvtColor(original, cv.COLOR_BGR2RGB))
+    ax2.imshow(cv.cvtColor(transformed_images[0], cv.COLOR_BGR2RGB))
+    ax3.imshow(cv.cvtColor(transformed_images[1], cv.COLOR_BGR2RGB))
+    ax4.imshow(cv.cvtColor(transformed_images[2], cv.COLOR_BGR2RGB))
+    ax5.imshow(cv.cvtColor(transformed_images[3], cv.COLOR_BGR2RGB))
+    ax6.imshow(cv.cvtColor(transformed_images[4], cv.COLOR_BGR2RGB))
+    ax7.imshow(cv.cvtColor(transformed_images[5], cv.COLOR_BGR2RGB))
+    ax8.imshow(cv.cvtColor(transformed_images[6], cv.COLOR_BGR2RGB))
     # plot the histogram
     bgr_img = transformed_images[0]
     hsv_img = cv.cvtColor(bgr_img, cv.COLOR_BGR2HSV)
@@ -131,14 +134,18 @@ def _subcommand_show(args):
     plt.show()
 
 
+def _get_all_files_paths(path):
+    
+
+
 def _subcommand_transform(args):
     print("DEBUG:\t", "transform subcommand isn't implemented.")
+    print("DEBUG:\t", args)
     # pcv.print_image(transformed_images, filename="./taha_test2.jpg")
 
 
 if __name__ == '__main__':
     args = _parse_args()
-    print("DEBUG:\t", args)
     if hasattr(args, 'img'):
         _subcommand_show(args)
     else:
