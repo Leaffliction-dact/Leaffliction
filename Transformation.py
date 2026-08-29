@@ -2,7 +2,6 @@ import cv2 as cv
 import sys
 import argparse
 from pathlib import Path
-from plantcv import plantcv as pcv
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 from utils.image_transformations import (
@@ -70,8 +69,9 @@ def _transform_image(original):
 
 def _subcommand_show(args):
     original = cv.imread(args.img, cv.IMREAD_COLOR)
-    if original == None:
-        print("unable to open file as image. check that the filename is correct.")
+    if original is None:
+        print("""unable to open file as image.
+                check that the filename is correct.""")
         sys.exit(1)
     transformed_images = _transform_image(original)
     # build the figure.
@@ -136,35 +136,52 @@ def _subcommand_show(args):
 
 
 def _get_all_filepaths(path):
-    if path.exists() == False:
+    if path.exists() is False:
         print("--src path doesn't exist.")
-        os.exit(1)
+        sys.exit(1)
     if path.is_file():
         return [str(path)]
     paths = []
     subdirs = [path]
     while len(subdirs) != 0:
-        paths = paths + [x for x in subdirs[0].iterdir() if x.is_file() and x.name[0] != '.']
+        paths = paths + [x for x in subdirs[0].iterdir()
+                         if x.is_file() and x.name[0] != '.']
         if subdirs[0].is_dir():
-            subdirs = subdirs[1:] + [x for x in subdirs[0].iterdir() if x.is_dir() and x.name[0] != '.']
+            subdirs = subdirs[1:] + [x for x in subdirs[0].iterdir()
+                                     if x.is_dir() and x.name[0] != '.']
         else:
             subdirs = subdirs[1:]
     return paths
-
-    
 
 
 def _subcommand_transform(args):
     print("DEBUG:\t", "transform subcommand isn't implemented.")
     print("DEBUG:\t", args)
     paths = _get_all_filepaths(Path(args.src))
+    Path(args.dst).mkdir()
     for path in paths:
+        stem = path.stem
+        suffix = path.suffix
+        parent = Path(args.dst).joinpath(path.parent.relative_to(args.src))
         original = cv.imread(str(path), cv.IMREAD_COLOR)
-        if original == None:
+        if original is None:
             continue
-        transformed_images = _transform_image(original)
-        
-        print(str(path))
+        images = _transform_image(original)
+        print(parent.joinpath(stem + '_x' + suffix))
+        cv.imwrite(parent.joinpath(stem + "_gaussian_blur" + suffix),
+                   images[0])
+        cv.imwrite(parent.joinpath(stem + "_chanel" + suffix),
+                   images[1])
+        cv.imwrite(parent.joinpath(stem + "_mask" + suffix),
+                   images[2])
+        cv.imwrite(parent.joinpath(stem + "_roi_object" + suffix),
+                   images[3])
+        cv.imwrite(parent.joinpath(stem + "_analyze_object" + suffix),
+                   images[4])
+        cv.imwrite(parent.joinpath(stem + "_pseudolandmarks" + suffix),
+                   images[5])
+        cv.imwrite(parent.joinpath(stem + "_normal_img" + suffix),
+                   images[6])
 
     # pcv.print_image(transformed_images, filename="./taha_test2.jpg")
 
