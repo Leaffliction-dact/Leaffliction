@@ -226,3 +226,7 @@ augmented_directory/
 
 
 images/
+
+
+# Vim swp files.
+**/*.swp
