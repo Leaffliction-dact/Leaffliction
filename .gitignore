@@ -237,3 +237,6 @@ img_dim
 *.zip
 cti*
 id*
+
+# Vim swp files.
+**/*.swp
