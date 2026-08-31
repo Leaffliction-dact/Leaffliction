@@ -80,12 +80,12 @@ def transform_pseudolandmarks(img, mask):
     return img
 
 
-def transform_normalize(img, mask, stats):
+def transform_normalize(img, mask, stats, size=128):
     img = img.copy()
     img = cv.bitwise_or(img, img, mask=mask)
     img[mask == 0] = (255, 255, 255)
 
     img = img[stats[1]:stats[1] + stats[3], stats[0]:stats[0] + stats[2]]
-    img = cv.resize(img, (128, 128))
+    img = cv.resize(img, (size, size))
 
     return img

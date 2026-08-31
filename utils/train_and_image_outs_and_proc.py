@@ -1,6 +1,5 @@
 import json
 import random
-import warnings
 import zipfile
 import numpy as np
 import cv2
@@ -8,91 +7,28 @@ from pathlib import Path
 from plantcv import plantcv as pcv
 from Augmentation import apply_effects
 from utils.effects import EffectName
+from utils.image_transformations import (
+    transform_gaussian_blur,
+    transform_chanel,
+    transform_mask,
+    transform_roi_boundaries,
+    transform_normalize,
+)
 
 pcv.params.verbose = False
-warnings.filterwarnings(
-    "ignore",
-    category=FutureWarning,
-    module=r"plantcv\.plantcv\.(fill|closing)")
 
 # start small for iteration speed try 224/256 later
 # btw, 64 apparently works great
 INPUT_SIZE = 128
-MASK_CROP_PADDING = 10
-MASKING_MAX_DIM = 512
-MASK_REFERENCE_DIM = 256
-MASK_FILL_MIN_AREA = 200
-MASK_CLOSE_KERNEL_SIZE = 15
 AUGS_TO_MAKE = 3
 
 
-def _crop_to_largest_component(
-        img: np.ndarray,
-        mask: np.ndarray,
-        padding=MASK_CROP_PADDING) -> tuple:
-    num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(
-        mask, connectivity=8
-    )
-    if (num_labels <= 1):
-        return img, mask
-
-    areas = stats[1:, cv2.CC_STAT_AREA]
-    largest_label = 1 + int(np.argmax(areas))
-    component_mask = np.where(labels == largest_label, mask, 0)
-    component_mask = component_mask.astype(np.uint8)
-
-    x = stats[largest_label, cv2.CC_STAT_LEFT]
-    y = stats[largest_label, cv2.CC_STAT_TOP]
-    w = stats[largest_label, cv2.CC_STAT_WIDTH]
-    h = stats[largest_label, cv2.CC_STAT_HEIGHT]
-
-    img_h, img_w = mask.shape[:2]
-    x0 = max(x - padding, 0)
-    y0 = max(y - padding, 0)
-    x1 = min(x + w + padding, img_w)
-    y1 = min(y + h + padding, img_h)
-
-    return img[y0:y1, x0:x1], component_mask[y0:y1, x0:x1]
-
-
 def mask_and_resize(img: np.ndarray, size=INPUT_SIZE) -> np.ndarray:
-    h, w = img.shape[:2]
-    max_dim = max(h, w)
-    if (max_dim > MASKING_MAX_DIM):
-        downscale = MASKING_MAX_DIM / max_dim
-        img = cv2.resize(
-            img,
-            (int(w * downscale), int(h * downscale)),
-            interpolation=cv2.INTER_AREA)
-        h, w = img.shape[:2]
-    area_scale = (h * w) / (MASK_REFERENCE_DIM ** 2)
-    linear_scale = area_scale ** 0.5
-
-    a_channel = pcv.rgb2gray_lab(rgb_img=img, channel="a")
-    green_mask = pcv.threshold.otsu(gray_img=a_channel, object_type="dark")
-
-    b_channel = pcv.rgb2gray_lab(rgb_img=img, channel="b")
-    yellow_mask = pcv.threshold.otsu(gray_img=b_channel, object_type="light")
-
-    mask = pcv.logical_or(bin_img1=green_mask, bin_img2=yellow_mask)
-    fill_min_area = int(MASK_FILL_MIN_AREA * area_scale)
-    mask = pcv.fill(bin_img=mask, size=fill_min_area)
-
-    close_size = int(MASK_CLOSE_KERNEL_SIZE * linear_scale)
-    if (close_size % 2 == 0):
-        close_size += 1
-    close_size = max(close_size, 3)
-    close_kernel = cv2.getStructuringElement(
-        cv2.MORPH_ELLIPSE,
-        (close_size, close_size)
-    )
-    mask = pcv.closing(gray_img=mask, kernel=close_kernel)
-    mask = pcv.fill_holes(bin_img=mask)
-
-    img, mask = _crop_to_largest_component(img, mask)
-
-    masked = pcv.apply_mask(img=img, mask=mask, mask_color="white")
-    return cv2.resize(masked, (size, size))
+    gaussian_blur = transform_gaussian_blur(img)
+    channel = transform_chanel(gaussian_blur)
+    mask = transform_mask(channel)
+    img_stats = transform_roi_boundaries(mask)
+    return transform_normalize(img, mask, img_stats, size=size)
 
 
 def _apply_effect_sequence(img: np.ndarray, effect_names: list) -> np.ndarray:
