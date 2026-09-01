@@ -227,6 +227,17 @@ augmented_directory/
 
 images/
 
+# tags for vim
+tags
+
+#models/results
+*.pt
+*.json
+img_dim
+*.zip
+cti*
+id*
+*id
 
 # Vim swp files.
 **/*.swp

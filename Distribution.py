@@ -8,24 +8,19 @@ import sys
 from pathlib import Path
 import seaborn as sns
 
+from utils.dataset import discover_class_images
+
 
 def dataset_analysis():
     if len(sys.argv) != 2:
         raise Exception("Invalid number of arguments.")
     my_dir = Path(sys.argv[1])
+    class_images = discover_class_images(my_dir)
     set_plants = set()
     dict_counts = {}
-    sub_directories_count = 0
-    for item in my_dir.iterdir():
-        # print(item.name)
-        set_plants.add(item.name.split(sep='_')[0])
-        # print(set_plants)
-        if item.is_dir():
-            sub_directories_count += 1
-            sub_dir = Path(sys.argv[1] + "/" + item.name)
-            JPG_files = list(sub_dir.glob("*.JPG"))
-            dict_counts[item.name] = len(JPG_files)
-    # print(dict_counts)
+    for class_name, images in class_images.items():
+        set_plants.add(class_name.split(sep='_')[0])
+        dict_counts[class_name] = len(images)
     series = pd.Series(dict_counts)
     fig, axes = plt.subplots(len(set_plants), 2,
                              figsize=(5 * len(set_plants), 10))

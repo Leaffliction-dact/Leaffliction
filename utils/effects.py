@@ -47,7 +47,7 @@ def effect_crop(img_arr, rows, crop_factor):
         top = (h - ch) // 2
         left = (w - cw) // 2
 
-        color = np.array([0, 0, 0])
+        color = np.array([255, 255, 255])
         image[:top, :] = color
         image[h-top:, :] = color
         image[:, :left] = color
@@ -75,7 +75,7 @@ def effect_skew(img_arr, rows, skew_factor):
         skewed = cv2.warpAffine(image, matrix, (w, h),
                                 flags=cv2.INTER_LINEAR,
                                 borderMode=cv2.BORDER_CONSTANT,
-                                borderValue=0)
+                                borderValue=(255, 255, 255))
         img_arr.append(skewed)
     return img_arr
 
@@ -99,7 +99,7 @@ def effect_rotation(img_arr, rows, rads):
             (w, h),
             flags=cv2.INTER_LINEAR,
             borderMode=cv2.BORDER_CONSTANT,
-            borderValue=0
+            borderValue=(255, 255, 255)
         )
         img_arr.append(rotated)
     return img_arr
