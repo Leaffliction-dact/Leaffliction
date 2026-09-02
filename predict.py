@@ -7,7 +7,8 @@ from matplotlib import pyplot as plt
 import torch
 
 from utils.train_and_image_outs_and_proc import mask_and_resize
-from leafcnn import LeafCNN
+from models import build_model, ARCH_CHOICES
+from resnetcnn import IMAGENET_MEAN, IMAGENET_STD
 
 
 def predict(model, tensor, device):
@@ -74,6 +75,11 @@ def parse_args():
         "-d", "--device", choices=["cpu", "cuda"], default="cpu",
         help="Device to run on (default: cpu)"
     )
+    parser.add_argument(
+        "-a", "--arch", choices=ARCH_CHOICES, default="leafcnn",
+        help="Model architecture to load (default: leafcnn). "
+             "Must match the --arch the model was trained with"
+    )
     args = parser.parse_args()
 
     return args
@@ -88,8 +94,8 @@ def main():
     print("[ OK ] Json loaded")
     idx_to_class = {v: k for k, v in cti.items()}
 
-    model = LeafCNN(num_classes=len(idx_to_class), d_o_p=0)
-    print("[ OK ] LeafCNN constructed")
+    model = build_model(args.arch, num_classes=len(idx_to_class), dropout=0)
+    print(f"[ OK ] {args.arch} constructed")
     sdict = torch.load(args.model_input, map_location=args.device)
     print("[ OK ] state dict loaded")
     model.load_state_dict(sdict)
@@ -106,8 +112,14 @@ def main():
         int(args.img_dim_input.read_text())
     )
     print("[ OK ] img masked & resized")
-    float_img = masked_resized.astype(np.float32) / 255.0
-    tensor = torch.from_numpy(float_img).permute(2, 0, 1)
+    if (args.arch == "resnet18"):
+        rgb_masked_resized = cv2.cvtColor(masked_resized, cv2.COLOR_BGR2RGB)
+        float_img = rgb_masked_resized.astype(np.float32) / 255.0
+        float_img = (float_img - np.array(IMAGENET_MEAN))
+        float_img = float_img / np.array(IMAGENET_STD)
+    else:
+        float_img = masked_resized.astype(np.float32) / 255.0
+    tensor = torch.from_numpy(float_img).permute(2, 0, 1).float()
     print("[ OK ] tensor formed")
 
     predicted_idx, confidence, res_list = predict(model, tensor, device)

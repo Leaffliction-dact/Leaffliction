@@ -167,3 +167,18 @@ def write_outs(
 
         for path in train_dir.rglob("*.jpg"):
             zf.write(path, arcname=str(path.relative_to(base_dir)))
+
+
+def write_plain_outs(
+        class_to_idx,
+        input_size: int,
+        class_map_path: Path,
+        img_dim_path: Path):
+    class_map_path.parent.mkdir(parents=True, exist_ok=True)
+    img_dim_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with open(class_map_path, "w") as f:
+        json.dump(class_to_idx, f)
+
+    with open(img_dim_path, "w") as f:
+        f.write(str(input_size))

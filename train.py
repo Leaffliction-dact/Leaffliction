@@ -6,11 +6,13 @@ from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader
 
 from utils.dataset import discover_class_images
-from leafcnn import LeafCNN
 from leafset import LeafDataset
+from models import build_model, ARCH_CHOICES
+from resnetcnn import IMAGENET_MEAN, IMAGENET_STD
 
 from utils.train_and_image_outs_and_proc import (
     write_outs,
+    write_plain_outs,
     prepare_split,
     INPUT_SIZE,
 )
@@ -28,6 +30,11 @@ DEFAULT_MODEL_PATH = Path("best_model.pt")
 DEFAULT_ZIP_PATH = Path("~/goinfre/leafzip/learnings.zip").expanduser()
 DEFAULT_CLASS_MAP_PATH = Path("class_to_idx.json")
 DEFAULT_IMG_DIM_PATH = Path("img_dim")
+
+RESNET18_INPUT_SIZE = 224
+DEFAULT_MODEL_PATH_RESNET18 = Path("best_model_resnet18.pt")
+DEFAULT_CLASS_MAP_PATH_RESNET18 = Path("class_to_idx_resnet18.json")
+DEFAULT_IMG_DIM_PATH_RESNET18 = Path("img_dim_resnet18")
 
 
 def discover_classes(root: Path, max_images_per_class=None):
@@ -166,6 +173,12 @@ def parse_args():
              "produces if ran without the option)"
     )
     parser.add_argument(
+        "-a", "--arch", choices=ARCH_CHOICES, default="leafcnn",
+        help="Model architecture to train (default: leafcnn). "
+             "resnet18 uses a pretrained torchvision ResNet18 with a "
+             "frozen backbone, and its own default output paths"
+    )
+    parser.add_argument(
         "-n", "--max-images-per-class", type=int, default=None,
         help="Cap the number of input images read per class "
              "(default: none). Ignored with --prepared-data"
@@ -183,10 +196,11 @@ def parse_args():
         help=f"Dropout percentage (0.0 to 0.9, default {DROPOUT_P})"
     )
     parser.add_argument(
-        "-I", "--input-size", type=int, default=INPUT_SIZE,
+        "-I", "--input-size", type=int, default=None,
         help="The size to which the inputs will be scaled, in pixels, "
              "one side only (since the inputs are squares). "
-             f"Default is {INPUT_SIZE}, ranges 16..512."
+             f"Default is {INPUT_SIZE} for leafcnn, "
+             f"{RESNET18_INPUT_SIZE} for resnet18. Ranges 16..512."
     )
     parser.add_argument(
         "-B", "--batch-size", type=int, default=BATCH_SIZE,
@@ -203,27 +217,54 @@ def parse_args():
              "Ignored with --prepared-data"
     )
     parser.add_argument(
-        "-m", "--model-output", type=Path, default=DEFAULT_MODEL_PATH,
+        "-m", "--model-output", type=Path, default=None,
         help="Path for writing the best model at the end of the session "
-             f"(default: {DEFAULT_MODEL_PATH})"
+             f"(default: {DEFAULT_MODEL_PATH} for leafcnn, "
+             f"{DEFAULT_MODEL_PATH_RESNET18} for resnet18)"
     )
     parser.add_argument(
         "-z", "--zip-output", type=Path, default=DEFAULT_ZIP_PATH,
         help="Path for writing the zip asked for in the subject pdf "
-             f"(default: {DEFAULT_ZIP_PATH})"
+             f"(default: {DEFAULT_ZIP_PATH}). "
+             "Ignored when --arch resnet18 (no zip produced)"
     )
     parser.add_argument(
-        "-j", "--class-map-output", type=Path,
-        default=DEFAULT_CLASS_MAP_PATH,
+        "-j", "--class-map-output", type=Path, default=None,
         help="Path for writing the class-to-index mapping "
-             f"(default: {DEFAULT_CLASS_MAP_PATH})"
+             f"(default: {DEFAULT_CLASS_MAP_PATH} for leafcnn, "
+             f"{DEFAULT_CLASS_MAP_PATH_RESNET18} for resnet18)"
     )
     parser.add_argument(
-        "-i", "--img-dim-output", type=Path, default=DEFAULT_IMG_DIM_PATH,
+        "-i", "--img-dim-output", type=Path, default=None,
         help="Path for writing the recorded input image size "
-             f"(default: {DEFAULT_IMG_DIM_PATH})"
+             f"(default: {DEFAULT_IMG_DIM_PATH} for leafcnn, "
+             f"{DEFAULT_IMG_DIM_PATH_RESNET18} for resnet18)"
     )
     args = parser.parse_args()
+
+    if (args.input_size is None):
+        if (args.arch == "resnet18"):
+            args.input_size = RESNET18_INPUT_SIZE
+        else:
+            args.input_size = INPUT_SIZE
+
+    if (args.model_output is None):
+        if (args.arch == "resnet18"):
+            args.model_output = DEFAULT_MODEL_PATH_RESNET18
+        else:
+            args.model_output = DEFAULT_MODEL_PATH
+
+    if (args.class_map_output is None):
+        if (args.arch == "resnet18"):
+            args.class_map_output = DEFAULT_CLASS_MAP_PATH_RESNET18
+        else:
+            args.class_map_output = DEFAULT_CLASS_MAP_PATH
+
+    if (args.img_dim_output is None):
+        if (args.arch == "resnet18"):
+            args.img_dim_output = DEFAULT_IMG_DIM_PATH_RESNET18
+        else:
+            args.img_dim_output = DEFAULT_IMG_DIM_PATH
 
     if (args.prepared_data is None and args.directory is None):
         parser.error(
@@ -312,31 +353,50 @@ def main():
         print("[ OK ] validation data split prepared")
         train_dir = train_cache
 
+    if (args.arch == "resnet18"):
+        dataset_mean = IMAGENET_MEAN
+        dataset_std = IMAGENET_STD
+    else:
+        dataset_mean = None
+        dataset_std = None
+
     train_loader = DataLoader(
-        LeafDataset(train_samples, size=args.input_size),
+        LeafDataset(
+            train_samples,
+            size=args.input_size,
+            mean=dataset_mean,
+            std=dataset_std
+        ),
         batch_size=args.batch_size,
         shuffle=True,
         pin_memory=use_cuda
     )
     print("[ OK ] training data loader created")
     val_loader = DataLoader(
-        LeafDataset(val_samples, size=args.input_size),
+        LeafDataset(
+            val_samples,
+            size=args.input_size,
+            mean=dataset_mean,
+            std=dataset_std
+        ),
         batch_size=args.batch_size,
         shuffle=False,
         pin_memory=use_cuda
     )
     print("[ OK ] validation data loader created")
 
-    model = LeafCNN(
+    model = build_model(
+        args.arch,
         num_classes=len(class_to_idx),
-        d_o_p=args.dropout
+        dropout=args.dropout
     ).to(device)
-    print("[ OK ] LeafCNN created")
+    print(f"[ OK ] {args.arch} created")
     class_weights = build_class_weights(train_samples, class_to_idx, device)
     print("[ OK ] class weights built")
     criterion = nn.CrossEntropyLoss(weight=class_weights)
     print("[ OK ] criterion built")
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
+    trainable_params = filter(lambda p: p.requires_grad, model.parameters())
+    optimizer = torch.optim.Adam(trainable_params, lr=args.learning_rate)
     print("[ OK ] optimizer built")
 
     print("[INFO] starting the training\n\n")
@@ -353,15 +413,23 @@ def main():
     )
     print(f"best val_acc: {best_val_acc:.4f}")
 
-    write_outs(
-        class_to_idx,
-        train_dir,
-        args.input_size,
-        args.model_output,
-        args.zip_output,
-        args.class_map_output,
-        args.img_dim_output,
-    )
+    if (args.arch == "leafcnn"):
+        write_outs(
+            class_to_idx,
+            train_dir,
+            args.input_size,
+            args.model_output,
+            args.zip_output,
+            args.class_map_output,
+            args.img_dim_output,
+        )
+    else:
+        write_plain_outs(
+            class_to_idx,
+            args.input_size,
+            args.class_map_output,
+            args.img_dim_output,
+        )
 
 
 if (__name__ == "__main__"):
