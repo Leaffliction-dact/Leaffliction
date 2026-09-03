@@ -20,7 +20,25 @@ pcv.params.verbose = False
 # start small for iteration speed try 224/256 later
 # btw, 64 apparently works great
 INPUT_SIZE = 128
-AUGS_TO_MAKE = 3
+AUGS_TO_MAKE = 1
+
+# raw field-dataset images can be several megapixels (e.g. AppleLeaf9 up to
+# 2048x1365); augmentation effects and masking are far cheaper run on a
+# capped-down copy first, so raw images get shrunk to this multiple of
+# inpsize (longest side) before either. Leaves headroom over inpsize itself
+# so the later leaf-crop-then-resize in mask_and_resize isn't upscaling
+PREPROCESS_SCALE_FACTOR = 2
+
+
+def _cap_longest_side(img: np.ndarray, max_side: int) -> np.ndarray:
+    h, w = img.shape[:2]
+    longest_side = max(h, w)
+    if (longest_side <= max_side):
+        return img
+    else:
+        scale = max_side / longest_side
+        new_size = (int(w * scale), int(h * scale))
+        return cv2.resize(img, new_size, interpolation=cv2.INTER_AREA)
 
 
 def mask_and_resize(img: np.ndarray, size=INPUT_SIZE) -> np.ndarray:
@@ -46,6 +64,7 @@ def _prepare_and_write_imgs(
         i=None,
         ):
     img = cv2.imread(str(raw_path))
+    img = _cap_longest_side(img, inpsize * PREPROCESS_SCALE_FACTOR)
 
     if (effect_names):
         img = _apply_effect_sequence(img, effect_names)

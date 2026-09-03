@@ -1,5 +1,6 @@
 from pathlib import Path
 import argparse
+import random
 import torch
 import torch.nn as nn
 from sklearn.model_selection import train_test_split
@@ -8,7 +9,7 @@ from torch.utils.data import DataLoader
 from utils.dataset import discover_class_images
 from leafset import LeafDataset
 from models import build_model, ARCH_CHOICES
-from resnetcnn import IMAGENET_MEAN, IMAGENET_STD
+from resnetcnn import IMAGENET_MEAN, IMAGENET_STD, UNFREEZE_CHOICES
 
 from utils.train_and_image_outs_and_proc import (
     write_outs,
@@ -19,11 +20,13 @@ from utils.train_and_image_outs_and_proc import (
 
 BATCH_SIZE = 32
 LEARNING_RATE = 1e-3
+BACKBONE_LEARNING_RATE = 1e-4
 VAL_SPLIT = 0.15
 DROPOUT_P = 0.3
 
 MAX_EPOCHS = 50
 PATIENCE = 7
+SPLIT_SEED = 42
 
 DEFAULT_CACHE_DIR = Path("~/goinfre/_prepared_data").expanduser()
 DEFAULT_MODEL_PATH = Path("best_model.pt")
@@ -43,10 +46,12 @@ def discover_classes(root: Path, max_images_per_class=None):
         name: i for i, name in enumerate(sorted(class_images))
     }
 
+    rng = random.Random(SPLIT_SEED)
     samples = []
     for class_name, images in class_images.items():
         if (max_images_per_class is not None):
-            images = images[:max_images_per_class]
+            if (len(images) > max_images_per_class):
+                images = rng.sample(images, max_images_per_class)
         for path in images:
             samples.append((path, class_name))
 
@@ -211,6 +216,30 @@ def parse_args():
         help=f"Learning rate (0.0 to 1.0, default {LEARNING_RATE})"
     )
     parser.add_argument(
+        "-u", "--unfreeze", choices=UNFREEZE_CHOICES, default="none",
+        help="Backbone unfreezing depth for staged fine-tuning, "
+             "--arch resnet18 only (default: none, i.e. classifier-only "
+             "as used for both the PlantVillage baseline and field-data "
+             "phase 1). 'layer4' unfreezes the last resnet block + fc, "
+             "for field-data phase 2. 'layer3' additionally unfreezes "
+             "the block before that. Ignored for --arch leafcnn"
+    )
+    parser.add_argument(
+        "-U", "--backbone-learning-rate", type=float,
+        default=BACKBONE_LEARNING_RATE,
+        help="Learning rate for the unfrozen backbone layers when "
+             f"--unfreeze is not 'none' (default: {BACKBONE_LEARNING_RATE})"
+             ". Should usually be lower than --learning-rate. "
+             "Ignored when --unfreeze is 'none'"
+    )
+    parser.add_argument(
+        "-F", "--init-from", type=Path, default=None,
+        help="Path to a checkpoint (state_dict) to load weights from "
+             "before training starts, e.g. a phase 1 resnet18 checkpoint "
+             "being continued into phase 2 with --unfreeze. Must match "
+             "--arch and the number of classes. Optional"
+    )
+    parser.add_argument(
         "-c", "--cache-dir", type=Path, default=DEFAULT_CACHE_DIR,
         help="Where to cache the preprocessed images "
              f"(default: {DEFAULT_CACHE_DIR}). "
@@ -289,6 +318,15 @@ def parse_args():
         parser.error(
             "The learning rate specified is found to be quite invalid"
         )
+    if (not (0.0 <= args.backbone_learning_rate <= 1.0)):
+        parser.error(
+            "The backbone learning rate specified is found to be quite "
+            "invalid"
+        )
+    if (args.unfreeze != "none" and args.arch != "resnet18"):
+        parser.error("--unfreeze is only supported with --arch resnet18")
+    if (args.init_from is not None and not args.init_from.exists()):
+        parser.error(f"--init-from checkpoint not found: {args.init_from}")
     if (args.cache_dir.exists() and not args.prepared_data):
         parser.error(
             f"Cache dir {args.cache_dir} already exists"
@@ -329,7 +367,7 @@ def main():
             raw_samples,
             test_size=VAL_SPLIT,
             stratify=labels_for_split,
-            random_state=42
+            random_state=SPLIT_SEED
         )
         print("[ OK ] split of raw succeeded")
 
@@ -388,15 +426,31 @@ def main():
     model = build_model(
         args.arch,
         num_classes=len(class_to_idx),
-        dropout=args.dropout
+        dropout=args.dropout,
+        unfreeze=args.unfreeze
     ).to(device)
     print(f"[ OK ] {args.arch} created")
+    if (args.init_from is not None):
+        state_dict = torch.load(args.init_from, map_location=device)
+        model.load_state_dict(state_dict)
+        print(f"[ OK ] weights loaded from {args.init_from}")
     class_weights = build_class_weights(train_samples, class_to_idx, device)
     print("[ OK ] class weights built")
     criterion = nn.CrossEntropyLoss(weight=class_weights)
     print("[ OK ] criterion built")
-    trainable_params = filter(lambda p: p.requires_grad, model.parameters())
-    optimizer = torch.optim.Adam(trainable_params, lr=args.learning_rate)
+    if (args.arch == "resnet18" and args.unfreeze != "none"):
+        optimizer = torch.optim.Adam([
+            {"params": model.head_parameters(), "lr": args.learning_rate},
+            {
+                "params": model.backbone_parameters(),
+                "lr": args.backbone_learning_rate,
+            },
+        ])
+    else:
+        trainable_params = filter(
+            lambda p: p.requires_grad, model.parameters()
+        )
+        optimizer = torch.optim.Adam(trainable_params, lr=args.learning_rate)
     print("[ OK ] optimizer built")
 
     print("[INFO] starting the training\n\n")

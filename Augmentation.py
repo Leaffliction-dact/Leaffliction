@@ -119,9 +119,9 @@ def apply_effects(image_list, effects, n_rows):
             case EffectName.BLUR.name:
                 image_list = effect_blur(image_list, n_rows, 7.5)
             case EffectName.CONTRAST.name:
-                image_list = effect_contrast(image_list, n_rows, 1.6)
+                image_list = effect_contrast(image_list, n_rows, 1.2)
             case EffectName.BRIGHTNESS.name:
-                image_list = effect_brightness(image_list, n_rows, 0.3)
+                image_list = effect_brightness(image_list, n_rows, 0.2)
             case _:
                 pass
     return image_list
