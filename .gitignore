@@ -238,6 +238,7 @@ img_dim
 cti*
 id*
 *id
+img_dim*
 
 # Vim swp files.
 **/*.swp
