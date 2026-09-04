@@ -218,11 +218,9 @@ def parse_args():
     parser.add_argument(
         "-u", "--unfreeze", choices=UNFREEZE_CHOICES, default="none",
         help="Backbone unfreezing depth for staged fine-tuning, "
-             "--arch resnet18 only (default: none, i.e. classifier-only "
+             "--arch resnet18 ONLY.\n(default: none, i.e. classifier-only "
              "as used for both the PlantVillage baseline and field-data "
-             "phase 1). 'layer4' unfreezes the last resnet block + fc, "
-             "for field-data phase 2. 'layer3' additionally unfreezes "
-             "the block before that. Ignored for --arch leafcnn"
+             "phase 1)."
     )
     parser.add_argument(
         "-U", "--backbone-learning-rate", type=float,
@@ -235,8 +233,7 @@ def parse_args():
     parser.add_argument(
         "-F", "--init-from", type=Path, default=None,
         help="Path to a checkpoint (state_dict) to load weights from "
-             "before training starts, e.g. a phase 1 resnet18 checkpoint "
-             "being continued into phase 2 with --unfreeze. Must match "
+             "before continued training starts. Must match "
              "--arch and the number of classes. Optional"
     )
     parser.add_argument(

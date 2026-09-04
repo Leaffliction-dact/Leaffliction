@@ -4,12 +4,16 @@ from torchvision.models import resnet18, ResNet18_Weights
 IMAGENET_MEAN = (0.485, 0.456, 0.406)
 IMAGENET_STD = (0.229, 0.224, 0.225)
 
-# cumulative: "layer3" unfreezes layer3 AND layer4, not layer3 alone
+# cumulative down the list
 UNFREEZE_CHOICES = ("none", "layer4", "layer3")
 
 
 class LeafResNet18(nn.Module):
-    def __init__(self, num_classes: int, d_o_p: float, unfreeze: str = "none"):
+    def __init__(
+            self,
+            num_classes: int,
+            d_o_p: float,
+            unfreeze: str = "none"):
         super().__init__()
         self.backbone = resnet18(weights=ResNet18_Weights.IMAGENET1K_V1)
         for param in self.backbone.parameters():
@@ -37,9 +41,6 @@ class LeafResNet18(nn.Module):
 
     def train(self, mode: bool = True):
         super().train(mode)
-        # BN running stats stay frozen everywhere, unfrozen blocks included:
-        # small target datasets + batch size 32 make recomputed BN stats
-        # noisy, so only weights (not BN stats) train in unfrozen blocks.
         self.backbone.eval()
         for module in self.trainable_modules:
             module.train(mode)

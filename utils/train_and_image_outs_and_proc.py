@@ -18,15 +18,14 @@ from utils.image_transformations import (
 pcv.params.verbose = False
 
 # start small for iteration speed try 224/256 later
-# btw, 64 apparently works great
+# btw, 64 apparently works great?
 INPUT_SIZE = 128
 AUGS_TO_MAKE = 1
 
-# raw field-dataset images can be several megapixels (e.g. AppleLeaf9 up to
-# 2048x1365); augmentation effects and masking are far cheaper run on a
-# capped-down copy first, so raw images get shrunk to this multiple of
-# inpsize (longest side) before either. Leaves headroom over inpsize itself
-# so the later leaf-crop-then-resize in mask_and_resize isn't upscaling
+#  max scale multiplier of an image before augmentation
+#  important since input size is applied after masking and the augs
+# sometimes get to eat a 4K image, which kills the PC. so downscale
+# preliminarily instead
 PREPROCESS_SCALE_FACTOR = 2
 
 
