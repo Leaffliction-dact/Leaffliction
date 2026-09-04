@@ -3,23 +3,17 @@ from pathlib import Path
 
 from utils.dataset import IMAGE_EXTENSIONS
 
-# per-source: source subdir name -> this repo's canonical class name
 SOURCE_CLASS_MAPS = {
     "appleleaf9": {
         "Scab": "Apple_scab",
         "Rust": "Apple_rust",
         "Health": "Apple_healthy",
-        # AppleLeaf9 calls this "Frogeye leaf spot"; taxonomically the
-        # same bacterium as what this repo's PlantVillage-derived classes
-        # call "Apple_Black_rot"
         "Frogeye leaf spot": "Apple_Black_rot",
     },
     "gvlid": {
         "Black rot": "Grape_Black_rot",
         "esca": "Grape_Esca",
         "healthy": "Grape_healthy",
-        # GVLiD calls this "leaf blight"; this repo's PlantVillage-derived
-        # classes call the equivalent disease "Grape_spot"
         "leaf blight": "Grape_spot",
     },
 }
@@ -29,10 +23,8 @@ DEFAULT_OUTPUT_DIR = Path("~/goinfre/field_data").expanduser()
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Symlink selected class folders from a field-data "
-                     "source into this repo's unified class taxonomy, "
-                     "producing a directory train.py can take as its "
-                     "raw-inputs directory (or --prepared-data source)."
+        description="Symlink selected class folders from the field data"
+                    "into this repo's class taxonomy for use in train.py"
     )
     parser.add_argument(
         "source_root", type=Path,
@@ -46,9 +38,7 @@ def parse_args():
     parser.add_argument(
         "-o", "--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR,
         help="Unified field-data directory to symlink into "
-             f"(default: {DEFAULT_OUTPUT_DIR}). Reused across sources: "
-             "re-running with a different --source adds to it without "
-             "touching classes already populated by other sources"
+             f"(default: {DEFAULT_OUTPUT_DIR}). Re-use with different sources"
     )
     args = parser.parse_args()
 
@@ -69,9 +59,6 @@ def symlink_class_images(source_dir: Path, dest_dir: Path, source_key: str):
         if (image_path.suffix.lower().lstrip(".") not in IMAGE_EXTENSIONS):
             continue
 
-        # source-prefixed name: sources numbering their own files from 1
-        # (AppleLeaf9's "Scab (1).jpg", a future source's "IMG (1).jpg", ...)
-        # would otherwise collide once merged into one canonical class dir
         link_path = dest_dir / f"{source_key}__{image_path.name}"
         if (link_path.exists() or link_path.is_symlink()):
             skipped += 1
@@ -98,7 +85,7 @@ def main():
             source_dir, dest_dir, args.source
         )
         print(
-            f"[ OK ] {subdir_name!r} -> {canonical_class}: "
+            f"[ OK ] {subdir_name!r} into {canonical_class}: "
             f"{linked} linked, {skipped} already present"
         )
 
