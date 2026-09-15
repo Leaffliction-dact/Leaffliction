@@ -155,8 +155,6 @@ def _get_all_filepaths(path):
 
 
 def _subcommand_transform(args):
-    print("DEBUG:\t", "transform subcommand isn't implemented.")
-    print("DEBUG:\t", args)
     paths = _get_all_filepaths(Path(args.src))
     Path(args.dst).mkdir()
     for path in paths:
@@ -182,8 +180,6 @@ def _subcommand_transform(args):
                    images[5])
         cv.imwrite(parent.joinpath(stem + "_normal_img" + suffix),
                    images[6])
-
-    # pcv.print_image(transformed_images, filename="./taha_test2.jpg")
 
 
 if __name__ == '__main__':
