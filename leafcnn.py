@@ -1,4 +1,5 @@
 import torch.nn as nn
+from torch.profiler import record_function
 
 
 class LeafCNN(nn.Module):
@@ -16,4 +17,7 @@ class LeafCNN(nn.Module):
         )
 
     def forward(self, x):
-        return self.classifier(self.features(x))
+        with record_function("[LeafCNN] features"):
+            x = self.features(x)
+        with record_function("[LeafCNN] classifier"):
+            return self.classifier(x)

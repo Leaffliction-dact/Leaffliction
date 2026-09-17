@@ -5,17 +5,36 @@ from pathlib import Path
 import numpy as np
 from matplotlib import pyplot as plt
 import torch
+from torch.profiler import record_function
 
 from utils.train_and_image_outs_and_proc import mask_and_resize
+from utils.profiling import make_inference_profiler, print_profiler_summary
 from models import build_model, ARCH_CHOICES
 from resnetcnn import IMAGENET_MEAN, IMAGENET_STD
 
 
 def predict(model, tensor, device):
+    """
+    Run a single forward pass and return (predicted_idx, confidence, probs).
+
+    record_function() labels annotate the profiler trace with named regions
+    for the device transfer, forward pass, and softmax.  They are zero-cost
+    when no profiler is active, so they are always present.
+
+    The model's own forward() (LeafCNN or LeafResNet18) contains additional
+    finer-grained labels (features/classifier for LeafCNN; stem/layer1-4/
+    head for ResNet18) that appear as child spans in TensorBoard's trace.
+    """
     with torch.no_grad():
-        logits = model(tensor.unsqueeze(0).to(device))
-        res_probs = torch.softmax(logits, dim=1).squeeze(0)
-        print("res_probs...")
+        with record_function("[predict] unsqueeze_and_transfer"):
+            inp = tensor.unsqueeze(0).to(device)
+
+        with record_function("[predict] forward"):
+            logits = model(inp)
+
+        with record_function("[predict] softmax"):
+            res_probs = torch.softmax(logits, dim=1).squeeze(0)
+
         res_list = res_probs.tolist()
         res_idx = res_probs.argmax().item()
         return res_idx, res_probs[res_idx].item(), res_list
@@ -80,8 +99,15 @@ def parse_args():
         help="Model architecture to load (default: leafcnn). "
              "Must match the --arch the model was trained with"
     )
+    parser.add_argument(
+        "--profile", action="store_true",
+        help="Profile the forward pass with PyTorch's profiler and print a "
+             "summary of the top operators to stdout.  One warm-up inference "
+             "is run first to flush JIT / cuDNN benchmarking noise, then the "
+             "measured call follows.  Works with both --arch leafcnn and "
+             "--arch resnet18; the ResNet18 summary shows per-layer timings."
+    )
     args = parser.parse_args()
-
     return args
 
 
@@ -122,8 +148,23 @@ def main():
     tensor = torch.from_numpy(float_img).permute(2, 0, 1).float()
     print("[ OK ] tensor formed")
 
-    predicted_idx, confidence, res_list = predict(model, tensor, device)
-    print("[ OK ] prediction done")
+    if args.profile:
+        print("[profiler] enabled for inference")
+
+        with torch.no_grad():
+            _ = model(tensor.unsqueeze(0).to(device))
+        print("[profiler] warm-up done — starting profiled run")
+
+        _prof = make_inference_profiler(device)
+        with _prof:
+            predicted_idx, confidence, res_list = predict(
+                model, tensor, device
+            )
+        print("[ OK ] profiled prediction done")
+        print_profiler_summary(_prof)
+    else:
+        predicted_idx, confidence, res_list = predict(model, tensor, device)
+        print("[ OK ] prediction done")
 
     classname = idx_to_class[predicted_idx]
     print(f"{confidence:.1%} {classname}")

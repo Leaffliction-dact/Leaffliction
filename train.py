@@ -1,3 +1,4 @@
+from contextlib import nullcontext
 from pathlib import Path
 import argparse
 import random
@@ -5,8 +6,10 @@ import torch
 import torch.nn as nn
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader
+from torch.profiler import record_function
 
 from utils.dataset import discover_class_images
+from utils.profiling import make_training_profiler, print_profiler_summary
 from leafset import LeafDataset
 from models import build_model, ARCH_CHOICES
 from resnetcnn import IMAGENET_MEAN, IMAGENET_STD, UNFREEZE_CHOICES
@@ -116,51 +119,133 @@ def train(
         device,
         max_epochs,
         patience,
-        model_path: Path):
+        model_path: Path,
+        profile_dir: Path | None = None):
+    """
+    Train *model* with optional PyTorch profiling.
+
+    When *profile_dir* is provided the profiler captures a scheduled window
+    of batches (skip 1 → warm up 1 → record 5) and writes a TensorBoard
+    Chrome trace to that directory.  A human-readable summary table is
+    printed to stdout when training finishes.
+
+    record_function() labels inside this loop and inside each model's
+    forward() (LeafCNN / LeafResNet18) annotate the trace with named
+    regions so TensorBoard's flame-chart shows exactly where time is spent.
+    The labels are zero-cost when no profiler is active.
+
+    For LeafResNet18 the per-layer breakdown (stem / layer1-4 / head)
+    reveals whether the frozen convolutional stages or the replacement head
+    dominate inference time.
+
+    Args:
+        train_loader:  DataLoader for the training split.
+        val_loader:    DataLoader for the validation split.
+        model:         LeafCNN or LeafResNet18 instance.
+        criterion:     Weighted CrossEntropyLoss.
+        optimizer:     Adam (single or dual param-group for backbone tuning).
+        device:        Compute device.
+        max_epochs:    Hard epoch ceiling.
+        patience:      Early-stopping patience on val_loss.
+        model_path:    Where to save the best checkpoint.
+        profile_dir:   Directory for TensorBoard traces, or None to skip.
+
+    Returns:
+        best_val_acc (float)
+    """
     best_val_acc = 0.0
     best_val_loss = float("inf")
     epochs_without_improvement = 0
     model_path.parent.mkdir(parents=True, exist_ok=True)
 
-    try:
-        for epoch in range(max_epochs):
-            model.train()
-            for images, labels in train_loader:
-                images = images.to(device, non_blocking=True)
-                labels = labels.to(device, non_blocking=True)
-                logits = model(images)
-                loss = criterion(logits, labels)
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
+    # Build the profiler once; _prof keeps a live reference so we can call
+    # print_profiler_summary() even after the context manager has exited
+    # (e.g. via KeyboardInterrupt).
+    _prof = (
+        make_training_profiler(device, profile_dir)
+        if profile_dir is not None else None
+    )
+    ctx = _prof if _prof is not None else nullcontext()
 
-            model.eval()
-            with torch.no_grad():
-                val_acc, val_loss = evaluate(
-                    model, val_loader, criterion, device
+    if profile_dir is not None:
+        print(f"[profiler] enabled — traces → {profile_dir}")
+        print("[profiler] schedule: skip=1  warmup=1  active=5  repeat=1\n")
+
+    try:
+        with ctx as prof:
+            for epoch in range(max_epochs):
+                model.train()
+
+                for images, labels in train_loader:
+
+                    # ── host → device ──────────────────────────────────────
+                    with record_function("[train] host_to_device"):
+                        images = images.to(device, non_blocking=True)
+                        labels = labels.to(device, non_blocking=True)
+
+                    # ── forward (model-internal labels add more detail) ────
+                    with record_function("[train] forward"):
+                        logits = model(images)
+
+                    # ── loss ───────────────────────────────────────────────
+                    with record_function("[train] loss"):
+                        loss = criterion(logits, labels)
+
+                    # ── backward ───────────────────────────────────────────
+                    with record_function("[train] zero_grad"):
+                        optimizer.zero_grad()
+
+                    with record_function("[train] backward"):
+                        loss.backward()
+
+                    # ── parameter update ───────────────────────────────────
+                    with record_function("[train] optimizer_step"):
+                        optimizer.step()
+
+                    # Advance the schedule (no-op when prof is None).
+                    if prof is not None:
+                        prof.step()
+
+                # ── per-epoch validation ───────────────────────────────────
+                model.eval()
+                with torch.no_grad():
+                    with record_function("[eval] validation"):
+                        val_acc, val_loss = evaluate(
+                            model, val_loader, criterion, device
+                        )
+
+                print(
+                    f"epoch {epoch + 1:4d}/{max_epochs}  "
+                    f"val_acc={val_acc:.4f}  val_loss={val_loss:.4f}"
                 )
 
-            print(
-                f"epoch {epoch + 1:4d}/{max_epochs}  "
-                f"val_acc={val_acc:.4f}  val_loss={val_loss:.4f}"
-            )
+                if (val_acc > best_val_acc):
+                    best_val_acc = val_acc
+                    torch.save(model.state_dict(), model_path)
 
-            if (val_acc > best_val_acc):
-                best_val_acc = val_acc
-                torch.save(model.state_dict(), model_path)
+                if (val_loss < best_val_loss):
+                    best_val_loss = val_loss
+                    epochs_without_improvement = 0
+                else:
+                    epochs_without_improvement += 1
 
-            if (val_loss < best_val_loss):
-                best_val_loss = val_loss
-                epochs_without_improvement = 0
-            else:
-                epochs_without_improvement += 1
+                if (epochs_without_improvement >= patience):
+                    print(
+                        f"no val_loss improvement for {patience} epochs, "
+                        "stopping early"
+                    )
+                    break
 
-            if (epochs_without_improvement >= patience):
-                print(f"no val_loss improvement for {patience} epochs, "
-                      "stopping early")
-                break
     except KeyboardInterrupt:
+        # The 'with ctx' block's __exit__ is called while the exception
+        # unwinds the stack, so the profiler is fully finalised and the
+        # trace is flushed before we land here.
         print("Stopping & saving best results")
+
+    # _prof still references the finalised profiler object, so we can
+    # print its summary even when training was cut short by Ctrl-C.
+    if _prof is not None:
+        print_profiler_summary(_prof)
 
     return best_val_acc
 
@@ -265,6 +350,16 @@ def parse_args():
         help="Path for writing the recorded input image size "
              f"(default: {DEFAULT_IMG_DIM_PATH} for leafcnn, "
              f"{DEFAULT_IMG_DIM_PATH_RESNET18} for resnet18)"
+    )
+    # ── profiling ──────────────────────────────────────────────────────────
+    parser.add_argument(
+        "--profile-dir", type=Path, default=None, metavar="DIR",
+        help="Enable PyTorch profiling and write TensorBoard Chrome traces "
+             "to DIR.  A scheduled window of batches is profiled "
+             "(skip=1, warmup=1, active=5, repeat=1) to keep overhead low. "
+             "Works with both --arch leafcnn and --arch resnet18; the "
+             "ResNet18 trace shows individual layer4/layer3/head timings. "
+             "View with:  tensorboard --logdir DIR"
     )
     args = parser.parse_args()
 
@@ -461,6 +556,7 @@ def main():
         args.epochs,
         PATIENCE,
         args.model_output,
+        profile_dir=args.profile_dir,   # None → profiling disabled
     )
     print(f"best val_acc: {best_val_acc:.4f}")
 

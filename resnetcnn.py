@@ -1,4 +1,5 @@
 import torch.nn as nn
+from torch.profiler import record_function
 from torchvision.models import resnet18, ResNet18_Weights
 
 IMAGENET_MEAN = (0.485, 0.456, 0.406)
@@ -56,4 +57,24 @@ class LeafResNet18(nn.Module):
         return params
 
     def forward(self, x):
-        return self.backbone(x)
+        b = self.backbone
+
+        with record_function("[ResNet18] stem"):          # conv1+bn1+relu+pool
+            x = b.maxpool(b.relu(b.bn1(b.conv1(x))))
+
+        with record_function("[ResNet18] layer1"):
+            x = b.layer1(x)
+
+        with record_function("[ResNet18] layer2"):
+            x = b.layer2(x)
+
+        with record_function("[ResNet18] layer3"):
+            x = b.layer3(x)
+
+        with record_function("[ResNet18] layer4"):
+            x = b.layer4(x)
+
+        with record_function("[ResNet18] head"):          # avgpool + fc
+            x = b.avgpool(x)
+            x = x.flatten(1)
+            return b.fc(x)
