@@ -4,6 +4,7 @@ import random
 import torch
 import torch.nn as nn
 from sklearn.model_selection import train_test_split
+from torchmetrics.classification import MulticlassAUROC
 from torch.utils.data import DataLoader
 
 from utils.dataset import discover_class_images
@@ -17,8 +18,10 @@ from utils.train_and_image_outs_and_proc import (
     prepare_split,
     INPUT_SIZE,
 )
+NUM_WORKERS = 4
 
-BATCH_SIZE = 32
+
+BATCH_SIZE = 64
 LEARNING_RATE = 1e-3
 BACKBONE_LEARNING_RATE = 1e-4
 VAL_SPLIT = 0.15
@@ -92,7 +95,7 @@ def build_class_weights(train_samples, class_to_idx, device):
     return weights.to(device)
 
 
-def evaluate(model, loader, criterion, device):
+def evaluate(model, loader, criterion, device, auroc_metric=None):
     correct, total = 0, 0
     total_loss = 0.0
     for images, labels in loader:
@@ -100,11 +103,17 @@ def evaluate(model, loader, criterion, device):
         labels = labels.to(device, non_blocking=True)
         logits = model(images)
         loss = criterion(logits, labels)
+        if auroc_metric is None:
+            num_classes = logits.shape[1]
+            auroc_metric = MulticlassAUROC(num_classes=num_classes, average="macro").to(device)
+        auroc_metric.update(logits, labels)
+        roc_auc = auroc_metric(logits, labels)
         total_loss += loss.item() * labels.size(0)
         preds = logits.argmax(dim=1)
         correct += (preds == labels).sum().item()
         total += labels.size(0)
-    return correct / total, total_loss / total
+    epoch_roc_auc = auroc_metric.compute()
+    return correct / total, total_loss / total, epoch_roc_auc.item()
 
 
 def train(
@@ -136,13 +145,13 @@ def train(
 
             model.eval()
             with torch.no_grad():
-                val_acc, val_loss = evaluate(
+                val_acc, val_loss, roc_auc = evaluate(
                     model, val_loader, criterion, device
                 )
 
             print(
                 f"epoch {epoch + 1:4d}/{max_epochs}  "
-                f"val_acc={val_acc:.4f}  val_loss={val_loss:.4f}"
+                f"val_acc={val_acc:.4f}  roc_auc={roc_auc:.4f}  val_loss={val_loss:.4f}"
             )
 
             if (val_acc > best_val_acc):
@@ -394,7 +403,6 @@ def main():
     else:
         dataset_mean = None
         dataset_std = None
-
     train_loader = DataLoader(
         LeafDataset(
             train_samples,
@@ -404,6 +412,7 @@ def main():
         ),
         batch_size=args.batch_size,
         shuffle=True,
+	num_workers=NUM_WORKERS,
         pin_memory=use_cuda
     )
     print("[ OK ] training data loader created")
